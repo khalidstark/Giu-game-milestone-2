@@ -11,7 +11,7 @@ public class MonsterCell extends Cell{
 		this.cellMonster = cellMonster;
 	}
 	
-	public Monster getMonster(){
+	public Monster getCellMonster(){
 		return cellMonster;
 	}
 

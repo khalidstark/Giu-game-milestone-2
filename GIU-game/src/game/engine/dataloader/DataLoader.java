@@ -50,6 +50,7 @@ package game.engine.dataloader;
                           int duration = Integer.parseInt(data[4]);
                           cards.add(new ConfusionCard(name, description, rarity, duration));
                           break;
+                          default: throw new InvalidCSVFormat(line);
                   }
               } catch (ArrayIndexOutOfBoundsException | IllegalArgumentException e) {
                   throw new InvalidCSVFormat(line);

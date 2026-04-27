@@ -91,6 +91,7 @@ public abstract class Monster implements Comparable<Monster> {
 	public int compareTo(Monster other) {
 		return this.position - other.position;
 	}
+	
 	abstract void executePowerupEffect(Monster opponentMonster);
 
 

@@ -1,5 +1,5 @@
 package game.engine.monsters;
-import game.engine.Constants;
+//import game.engine.Constants.*;
 import game.engine.Role;
 public class Dynamo extends Monster {
 	

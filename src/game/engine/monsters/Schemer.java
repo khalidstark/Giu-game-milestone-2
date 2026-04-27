@@ -15,10 +15,10 @@ public class Schemer extends Monster {
         super.setEnergy(getEnergy() + delta + Constants.SCHEMER_STEAL);
 	}
 	
- private int stealEnergyFrom(Monster target) {
-	 int steal = Math.min(Constants.SCHEMER_STEAL, target.getEnergy());
-	 target.setEnergy(target.getEnergy() - steal);
-     return steal;
+	private int stealEnergyFrom(Monster target) {
+		 int steal = Math.min(Constants.SCHEMER_STEAL, target.getEnergy());
+		 target.setEnergy(target.getEnergy() - steal);
+	     return steal;
 	 }
 	
  	public void executePowerupEffect(Monster opponentMonster) {
@@ -31,9 +31,5 @@ public class Schemer extends Monster {
  			this.setEnergy(this.getEnergy()+sum);
  		
 	 
- }
- 
-	
-	
-	
+ 	}	
 }

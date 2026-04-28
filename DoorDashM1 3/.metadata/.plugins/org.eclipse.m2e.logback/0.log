@@ -1,3 +1,0 @@
-2026-04-07 12:31:02,323 [Worker-5: Loading available Gradle versions] INFO  o.e.b.c.i.u.g.PublishedGradleVersions - Gradle version information cache is not available. Remote download required.
-2026-04-07 12:31:09,011 [Worker-5: Deferred Early Start] INFO  o.a.h.c.h.i.c.HttpRequestRetryExec - ex-0000000001 recoverable I/O exception (org.apache.hc.core5.http.NoHttpResponseException) caught when sending request to https://www.eclipse.org:443;request will be automatically re-executed in 0 MILLISECONDS (exec count 2)
-2026-04-25 09:31:11,912 [Worker-1: Loading available Gradle versions] INFO  o.e.b.c.i.u.g.PublishedGradleVersions - Gradle version information cache is out-of-date. Trying to update.

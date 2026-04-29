@@ -1,5 +1,13 @@
 package game.engine;
 import game.engine.dataloader.*;
+import game.engine.cells.*;
+import game.engine.exceptions.InvalidMoveException;
+
+import java.io.IOException;
+import java.util.*;
+
+import game.engine.monsters.*;
+import game.engine.cards.*;
 
 import java.util.ArrayList;
 
@@ -60,6 +68,79 @@ public class Board {
 	
 	
 	public void initializeBoard(ArrayList<Cell> specialCells){
-		
+		ArrayList<DoorCell> doors = new ArrayList<>();
+		ArrayList<ConveyorBelt> belts = new ArrayList<>();
+		ArrayList<ContaminationSock> socks = new ArrayList<>();
+		for (Cell c : specialCells) {
+			if (c instanceof DoorCell) {
+				doors.add((DoorCell) c);
+			} else if (c instanceof ConveyorBelt) {
+				belts.add((ConveyorBelt) c);
+			} else if (c instanceof ContaminationSock) {
+				socks.add((ContaminationSock) c);
+			}
 	}
+		
+		for (int i = 0; i < Constants.BOARD_SIZE; i++) {
+			if (i % 2 == 0) {
+				setCell(i, new Cell("Rest " + i));
+			} else {
+				setCell(i, doors.remove(0));
+			}
+		}
+
+		for (int idx : Constants.CARD_CELL_INDICES) {
+			setCell(idx, new CardCell("Card " + idx));
+		}
+		for (int idx : Constants.CONVEYOR_CELL_INDICES) {
+			setCell(idx, belts.remove(0));
+		}
+		for (int idx : Constants.SOCK_CELL_INDICES) {
+			setCell(idx, socks.remove(0));
+		}
+
+		ArrayList<Monster> stationed = getStationedMonsters();
+		for (int k = 0; k < Constants.MONSTER_CELL_INDICES.length && k < stationed.size(); k++) {
+			int idx = Constants.MONSTER_CELL_INDICES[k];
+			Monster m = stationed.get(k);
+			m.setPosition(idx);
+			MonsterCell mc = new MonsterCell(m.getName(), m);
+			mc.setMonster(m);
+			setCell(idx, mc);
+		}
+	}
+	
+	private Cell getCell(int index) {
+		int[] rc = indexToRowCol(index);
+		return boardCells[rc[0]][rc[1]];
+	}
+
+	private void setCell(int index, Cell cell) {
+		int[] rc = indexToRowCol(index);
+		boardCells[rc[0]][rc[1]] = cell;
+	}
+	
+	private void setCardsByRarity() {
+		ArrayList<Card> expanded = new ArrayList<>();
+		for (Card c : originalCards) {
+			for (int i = 0; i < c.getRarity(); i++) {
+				expanded.add(c);
+			}
+		}
+		originalCards = expanded;
+	}
+
+	public static void reloadCards() {
+		cards = new ArrayList<>(originalCards);
+		Collections.shuffle(cards);
+	}
+
+	public static Card drawCard() {
+		if (cards.isEmpty()) {
+			reloadCards();
+		}
+		return cards.remove(0);
+	}
+
+
 }

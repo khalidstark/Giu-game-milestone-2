@@ -1,13 +1,14 @@
 package game.engine;
-
+import game.engine.Board;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 
 import game.engine.dataloader.DataLoader;
-import game.engine.monsters.*;
 import game.engine.exceptions.InvalidMoveException;
 import game.engine.exceptions.OutOfEnergyException;
+import game.engine.monsters.*;
+
 public class Game {
 	private Board board;
 	private ArrayList<Monster> allMonsters; 
@@ -77,11 +78,12 @@ public class Game {
 	 private int rollDice(){
 		 return (int) (Math.random()*6) + 1;
 	 }
+	 
 	 public void usePowerup() throws OutOfEnergyException {
 	        if (current.getEnergy() < Constants.POWERUP_COST) {
 	            throw new OutOfEnergyException();
 	        }
-	        current.setEnergy(current.getEnergy() - Constants.POWERUP_COST);
+	        current.alterEnergy(-Constants.POWERUP_COST);
 	        current.executePowerupEffect(getCurrentOpponent());
 	    }
 
@@ -110,4 +112,4 @@ public class Game {
 	        if (checkWinCondition(opponent)) return opponent;
 	        return null;
 	    }
-	}
+}

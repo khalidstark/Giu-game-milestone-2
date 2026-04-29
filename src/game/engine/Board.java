@@ -51,13 +51,11 @@ public class Board {
 		
 		if(row % 2 == 1){
 			col = Constants.BOARD_COLS - 1 -col;
-			
 		}
 		
 		int[] pair = {row, col};
 		return pair;
 	}
-	
 	
 	public void initializeBoard(ArrayList<Cell> specialCells){
 		

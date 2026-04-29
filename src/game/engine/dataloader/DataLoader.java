@@ -89,7 +89,7 @@ public class DataLoader {
 
 		return cells;
 	}
-	
+
 	@SuppressWarnings("resource")
 	public static ArrayList<Monster> readMonsters() throws IOException {
 		ArrayList<Monster> monsters = new ArrayList<Monster>();

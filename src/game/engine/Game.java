@@ -56,4 +56,14 @@ public class Game {
 	    		.orElse(null);
 	}
 	
+	private Monster getCurrentOpponent(){
+		if(current == player)
+			return opponent;
+		else 
+			return player;
+	}
+	
+	 private int rollDice(){
+		 return (int) (Math.random()*6) + 1;
+	 }
 }

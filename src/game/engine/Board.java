@@ -128,7 +128,7 @@ public class Board {
 				expanded.add(c);
 			}
 		}
-		originalCards = expanded;
+		cards = expanded;
 	}
 
 	public static void reloadCards() {

@@ -20,7 +20,7 @@ public class MultiTasker extends Monster {
 	}
 
 	public void setEnergy(int energy) {
-        super.setEnergy(getEnergy() + Constants.MULTITASKER_BONUS);
+        super.setEnergy(energy + Constants.MULTITASKER_BONUS);
 	}
 	
 	public void move(int distance){

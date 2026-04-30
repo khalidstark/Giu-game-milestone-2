@@ -80,7 +80,7 @@ public class Board {
 			} else if (c instanceof ContaminationSock) {
 				socks.add((ContaminationSock) c);
 			}
-	}
+		}
 		
 		for (int i = 0; i < Constants.BOARD_SIZE; i++) {
 			if (i % 2 == 0) {
@@ -128,7 +128,7 @@ public class Board {
 				expanded.add(c);
 			}
 		}
-		cards = expanded;
+		originalCards = expanded;
 	}
 
 	public static void reloadCards() {
@@ -144,19 +144,20 @@ public class Board {
 	}
 
 	public void moveMonster(Monster currentMonster, int roll, Monster opponentMonster) throws InvalidMoveException{
-		int positionBefore = currentMonster.getPosition();
+		int oldPosition = currentMonster.getPosition();
 		currentMonster.move(roll);
 		
+		getCell(currentMonster.getPosition()).onLand(currentMonster, opponentMonster); 
+	
 		if(getCell(currentMonster.getPosition()).isOccupied() && currentMonster.getPosition() == opponentMonster.getPosition()){
-			currentMonster.setPosition(positionBefore);
+			currentMonster.setPosition(oldPosition);
 			throw new InvalidMoveException();
 		}
-		
-		getCell(currentMonster.getPosition()).onLand(currentMonster, opponentMonster);
-		
-		currentMonster.decrementConfusion();
-		opponentMonster.decrementConfusion();
-		
+
+		if(currentMonster.isConfused()){
+			currentMonster.decrementConfusion();
+			opponentMonster.decrementConfusion();
+		}
 		updateMonsterPositions(currentMonster, opponentMonster);
 	}
 	

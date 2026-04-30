@@ -95,11 +95,13 @@ public abstract class Monster implements Comparable<Monster> {
 	public abstract void executePowerupEffect(Monster opponentMonster);
 
 
-	boolean isConfused() {
+	public boolean isConfused() {
 		if (confusionTurns>0)
 			return true;
 		return false;
-		}
+	}
+	
+	
 	public void move(int distance) {
 		this.setPosition(this.getPosition()+ distance);
 	}

@@ -19,17 +19,18 @@ public class Game {
 	 public Game(Role playerRole) throws IOException {
 	        this.board = new Board(DataLoader.readCards());
 	        this.allMonsters = DataLoader.readMonsters();
-
+	        ArrayList<Monster> copyref = DataLoader.readMonsters();
+	        ArrayList<Monster> saved = this.allMonsters;
+	        this.allMonsters = copyref;
 	        this.player = selectRandomMonsterByRole(playerRole);
 	        Role oppositeRole = (playerRole == Role.SCARER) ? Role.LAUGHER : Role.SCARER;
 	        this.opponent = selectRandomMonsterByRole(oppositeRole);
+	        this.allMonsters = saved;
 	        this.current=player;
-	        ArrayList<Monster> stationed = new ArrayList<>(allMonsters);
-	        stationed.remove(player);
-	        stationed.remove(opponent);
-	        Board.setStationedMonsters(stationed);
+	        copyref.remove(player);
+	        copyref.remove(opponent);
+	        Board.setStationedMonsters(copyref);
 	        board.initializeBoard(DataLoader.readCells());
-	       
 	    }
 	
 	public Board getBoard() {

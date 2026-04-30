@@ -24,12 +24,8 @@ public class Schemer extends Monster {
  	public void executePowerupEffect(Monster opponentMonster) {
  		int sum = stealEnergyFrom(opponentMonster);
  			for( Monster m: Board.getStationedMonsters()) {
- 				int now = stealEnergyFrom(m);
- 				if (now<Constants.SCHEMER_STEAL)
  				sum+=stealEnergyFrom(m);
  			}	
- 			this.setEnergy(this.getEnergy()+sum);
- 		
-	 
+ 			this.setEnergy(this.getEnergy()+sum); 
  	}	
 }

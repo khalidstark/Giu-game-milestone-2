@@ -69,7 +69,7 @@ public class Board {
 		return pair;
 	}
 	
-	public void initializeBoard(ArrayList<Cell> specialCells){
+	public void initializeBoard(ArrayList<Cell> specialCells) throws InvalidCSVFormat {
 		ArrayList<DoorCell> doors = new ArrayList<>();
 		ArrayList<ConveyorBelt> belts = new ArrayList<>();
 		ArrayList<ContaminationSock> socks = new ArrayList<>();
@@ -82,11 +82,12 @@ public class Board {
 				socks.add((ContaminationSock) c);
 			}
 		}
-		
+
 		for (int i = 0; i < Constants.BOARD_SIZE; i++) {
 			if (i % 2 == 0) {
 				setCell(i, new Cell("Rest " + i));
 			} else {
+				if (doors.isEmpty()) throw new InvalidCSVFormat("Not enough door cells in CSV");
 				setCell(i, doors.remove(0));
 			}
 		}
@@ -95,9 +96,11 @@ public class Board {
 			setCell(idx, new CardCell("Card " + idx));
 		}
 		for (int idx : Constants.CONVEYOR_CELL_INDICES) {
+			if (belts.isEmpty()) throw new InvalidCSVFormat("Not enough conveyor belts in CSV");
 			setCell(idx, belts.remove(0));
 		}
 		for (int idx : Constants.SOCK_CELL_INDICES) {
+			if (socks.isEmpty()) throw new InvalidCSVFormat("Not enough contamination socks in CSV");
 			setCell(idx, socks.remove(0));
 		}
 
@@ -144,23 +147,24 @@ public class Board {
 		return cards.remove(0);
 	}
 
-	public void moveMonster(Monster currentMonster, int roll, Monster opponentMonster) throws InvalidMoveException{
-		int oldPosition = currentMonster.getPosition();
-		currentMonster.move(roll);
-		
-		getCell(currentMonster.getPosition()).onLand(currentMonster, opponentMonster); 
-	
-		if(getCell(currentMonster.getPosition()).isOccupied() && currentMonster.getPosition() == opponentMonster.getPosition()){
-			currentMonster.setPosition(oldPosition);
-			throw new InvalidMoveException();
-		}
+	public void moveMonster(Monster currentMonster, int roll, Monster opponentMonster) throws InvalidMoveException {
+	      int destination = (currentMonster.getPosition() + roll) % Constants.BOARD_SIZE;
 
-		if(currentMonster.isConfused()){
-			currentMonster.decrementConfusion();
-			opponentMonster.decrementConfusion();
-		}
-		updateMonsterPositions(currentMonster, opponentMonster);
-	}
+	      if (destination == opponentMonster.getPosition())
+	          throw new InvalidMoveException();
+
+	      currentMonster.move(roll);
+
+	      Cell landedCell = getCell(currentMonster.getPosition());
+	      landedCell.onLand(currentMonster, opponentMonster);
+
+	      if (currentMonster.isConfused()) {
+	          currentMonster.decrementConfusion();
+	          opponentMonster.decrementConfusion();
+	      }
+
+	      updateMonsterPositions(currentMonster, opponentMonster);
+	  }
 	
 	private void updateMonsterPositions(Monster player, Monster opponent){
 		for(int i = 0 ;i < Constants.BOARD_SIZE; i++){

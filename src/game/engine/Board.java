@@ -19,6 +19,7 @@ import game.engine.exceptions.InvalidCSVFormat;
 public class Board {
 	private Cell[][] boardCells;
 	private static ArrayList<Monster> stationedMonsters; 
+	private static ArrayList<Card> OriginalCardsCopy;
 	private static ArrayList<Card> originalCards;
 	public static ArrayList<Card> cards;
 	
@@ -26,8 +27,8 @@ public class Board {
 		this.boardCells = new Cell[Constants.BOARD_ROWS][Constants.BOARD_COLS];
 		stationedMonsters = new ArrayList<Monster>();
 		originalCards = readCards;
+		OriginalCardsCopy = originalCards;
 		cards = new ArrayList<Card>();
-		
 		setCardsByRarity();
 		reloadCards();
 	}
@@ -45,7 +46,7 @@ public class Board {
 	}
 
 	public static ArrayList<Card> getOriginalCards() {
-		return originalCards;
+		return OriginalCardsCopy;
 	}
 	
 	public static ArrayList<Card> getCards() {

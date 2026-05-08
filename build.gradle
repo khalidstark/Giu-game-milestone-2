@@ -1,0 +1,53 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src']
+            exclude 'game/tests/**'
+        }
+        resources {
+            srcDirs = ['assets']
+        }
+    }
+    test {
+        java {
+            srcDirs = ['src']
+            include 'game/tests/**'
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+def jmeVersion = '3.6.1-stable'
+
+dependencies {
+    implementation "org.jmonkeyengine:jme3-core:${jmeVersion}"
+    implementation "org.jmonkeyengine:jme3-desktop:${jmeVersion}"
+    implementation "org.jmonkeyengine:jme3-lwjgl3:${jmeVersion}"
+    implementation "org.jmonkeyengine:jme3-effects:${jmeVersion}"
+    implementation "org.jmonkeyengine:jme3-plugins:${jmeVersion}"
+
+    testImplementation 'junit:junit:4.13.2'
+}
+
+application {
+    mainClass = 'game.view3d.FactoryShellApp'
+    applicationDefaultJvmArgs = [
+        '-XstartOnFirstThread',
+        '--add-opens', 'java.base/java.lang=ALL-UNNAMED',
+        '--add-opens', 'java.desktop/sun.awt=ALL-UNNAMED',
+        '--add-opens', 'java.desktop/sun.java2d=ALL-UNNAMED'
+    ]
+}

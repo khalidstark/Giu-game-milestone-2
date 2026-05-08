@@ -60,6 +60,8 @@ public class FactoryShellApp extends SimpleApplication {
     private static final String CELL_CARD = "Models/boardcells/cardcell.glb";
     private static final String CELL_CONVEYOR = "Models/boardcells/conveyer belt cell.glb";
     private static final String CELL_SOCK = "Models/boardcells/contaminent sockcell.glb";
+    private static final String DOOR_PROP = "Models/boardcells/door-prop.glb";
+    private static final float DOOR_PROP_WIDTH = BOARD_CELL_SIZE * 0.56f;
     private static final String[] MONSTER_CELL_MODELS = {
             "Models/boardcells/monstercells/Mike Wazowski Cell.glb",
             "Models/boardcells/monstercells/Randall Boggs Cell.glb",
@@ -221,7 +223,39 @@ public class FactoryShellApp extends SimpleApplication {
             boardNode.attachChild(cell);
         }
 
+        attachDoorProps(boardNode, templates.get(CELL_DOOR));
         rootNode.attachChild(boardNode);
+    }
+
+    private void attachDoorProps(Node boardNode, CellTemplate doorCellTemplate) {
+        Spatial template = loadFactoryModel(DOOR_PROP);
+        template.updateModelBound();
+        if (!(template.getWorldBound() instanceof BoundingBox)) {
+            throw new IllegalStateException("Door prop model has no bounding box: " + DOOR_PROP);
+        }
+
+        BoundingBox bounds = (BoundingBox) template.getWorldBound();
+        float modelWidth = bounds.getXExtent() * 2f;
+        float scale = modelWidth > 0f ? DOOR_PROP_WIDTH / modelWidth : 1f;
+        float cellTopY = BOARD_CELL_FLOOR_CLEARANCE + doorCellTemplate.halfHeight * 2f * BOARD_CELL_SCALE;
+
+        for (int index = 0; index < Constants.BOARD_SIZE; index++) {
+            if (!isVisualDoorCell(index)) {
+                continue;
+            }
+
+            Spatial door = template.clone(false);
+            door.setName(String.format("door_%03d", index));
+            door.setLocalScale(scale);
+
+            Vector3f center = boardCellCenter(index);
+            Vector3f modelCenter = bounds.getCenter();
+            door.setLocalTranslation(
+                    center.x - modelCenter.x * scale,
+                    cellTopY + bounds.getYExtent() * scale - modelCenter.y * scale + 0.03f,
+                    center.z - modelCenter.z * scale);
+            boardNode.attachChild(door);
+        }
     }
 
     private Map<String, CellTemplate> loadBoardCellTemplates() {
@@ -271,6 +305,10 @@ public class FactoryShellApp extends SimpleApplication {
             return CELL_DOOR;
         }
         return CELL_NORMAL;
+    }
+
+    private boolean isVisualDoorCell(int index) {
+        return index % 2 == 1 && index != Constants.WINNING_POSITION;
     }
 
     private int monsterSlotForIndex(int index) {

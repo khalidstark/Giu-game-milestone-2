@@ -84,22 +84,6 @@ public class FactoryShellApp extends SimpleApplication {
     private static final String DOOR_PROP = "Models/boardcells/door-prop.glb";
     private static final float DOOR_PROP_WIDTH = BOARD_CELL_SIZE * 0.56f;
 
-    private static final String PLAYER_SCREEN_MODEL = "Models/boardcells/player-screen.glb";
-    private static final float SCREEN_TARGET_WIDTH = 4.25f;
-    private static final float SCREEN_PLAYER_X = -8.35f;
-    private static final float SCREEN_OPPONENT_X = 8.35f;
-    private static final float SCREEN_Y = 4.12f;
-    private static final float SCREEN_Z = -8.70f;
-    private static final float SCREEN_PLAYER_YAW = 11f * FastMath.DEG_TO_RAD;
-    private static final float SCREEN_OPPONENT_YAW = -11f * FastMath.DEG_TO_RAD;
-    private static final float SCREEN_DISPLAY_WIDTH = 2.72f;
-    private static final float SCREEN_DISPLAY_HEIGHT = 4.05f;
-    private static final float SCREEN_DISPLAY_CENTER_Y = 0.28f;
-    private static final float SCREEN_DISPLAY_FRONT_GAP = 0.06f;
-    private static final float CARD_KIOSK_WIDTH = 3.95f;
-    private static final float CARD_KIOSK_HEIGHT = 3.18f;
-    private static final float CARD_KIOSK_Y = 4.05f;
-    private static final float CARD_KIOSK_Z = -9.20f;
     private static final String DICE_MODEL = "Models/props/dice.glb";
     private static final float DICE_TARGET_SIZE = 0.72f;
     private static final float DICE_HOME_X = 0f;
@@ -126,7 +110,8 @@ public class FactoryShellApp extends SimpleApplication {
     private static final float TOKEN_LANE_OFFSET = BOARD_CELL_SIZE * 0.17f;
     private static final float TOKEN_FORWARD_YAW_OFFSET = 0f;
     private static final float HUD_MARGIN = 18f;
-    private static final float HUD_BOTTOM_HEIGHT = 86f;
+    private static final float HUD_TOP_HEIGHT = 172f;
+    private static final float HUD_BOTTOM_HEIGHT = 112f;
     private static final int HUD_BOTTOM_EVENT_COUNT = 3;
     private static final String[] MONSTER_CELL_MODELS = {
             "Models/boardcells/monstercells/Mike Wazowski Cell.glb",
@@ -230,9 +215,6 @@ public class FactoryShellApp extends SimpleApplication {
     private Game game;
     private Node boardRoot;
     private Node screenRoot;
-    private Node playerScreenContent;
-    private Node opponentScreenContent;
-    private Node cardKioskContent;
     private Node diceNode;
     private Node roleMenuGui = new Node("role_selection_menu");
     private Node gameplayHudGui = new Node("gameplay_hud");
@@ -248,6 +230,8 @@ public class FactoryShellApp extends SimpleApplication {
     private int lastVisualRoll = 1;
     private String lastRollText = "Space to roll";
     private String lastCardHighlight;
+    private String roleSelectionError;
+    private boolean sceneReady;
 
     public static void main(String[] args) {
         FactoryShellApp app = new FactoryShellApp();
@@ -261,6 +245,8 @@ public class FactoryShellApp extends SimpleApplication {
         settings.setTitle("DooR DasH - Factory Shell");
         settings.setWidth(1600);
         settings.setHeight(900);
+        settings.setMinResolution(960, 540);
+        settings.setResizable(true);
         settings.setSamples(8);
         settings.setVSync(true);
         settings.setFrameRate(60);
@@ -285,9 +271,11 @@ public class FactoryShellApp extends SimpleApplication {
                 new Vector3f(0f, 8.2f, 15.0f),
                 new Vector3f(0f, 1.05f, -1.6f),
                 46f);
+        sceneReady = true;
     }
 
     private void showRoleSelectionMenu(String error) {
+        roleSelectionError = error;
         roleMenuGui.detachAllChildren();
         if (roleMenuGui.getParent() == null) {
             guiNode.attachChild(roleMenuGui);
@@ -324,6 +312,21 @@ public class FactoryShellApp extends SimpleApplication {
         }
     }
 
+    @Override
+    public void reshape(int width, int height) {
+        super.reshape(width, height);
+        if (!sceneReady || cam == null || width <= 0 || height <= 0) {
+            return;
+        }
+
+        applyCamera(cam.getLocation(), cameraTarget, cameraCurrentFov);
+        if (appMode == AppMode.ROLE_SELECTION) {
+            showRoleSelectionMenu(roleSelectionError);
+        } else {
+            refreshGameplayHud();
+        }
+    }
+
     private void startBoardGame(Role selectedRole) {
         try {
             game = new Game(selectedRole);
@@ -340,7 +343,7 @@ public class FactoryShellApp extends SimpleApplication {
         eventLog.clear();
         lastRollText = "Space to roll";
         lastCardHighlight = null;
-        attachWallScreens();
+        attachWorldDice();
         refreshInfoPanels();
         addHudEvent("GAME START", String.format("You are %s vs %s",
                 game.getPlayer().getName(), game.getOpponent().getName()),
@@ -390,7 +393,6 @@ public class FactoryShellApp extends SimpleApplication {
             eventLog.remove(eventLog.size() - 1);
         }
         if (appMode == AppMode.BOARD) {
-            refreshWallScreens();
             ensureGameplayHud();
         }
     }
@@ -402,6 +404,12 @@ public class FactoryShellApp extends SimpleApplication {
         }
 
         float screenW = cam.getWidth();
+        float screenH = cam.getHeight();
+        drawTopGameplayHud(screenW, screenH);
+        drawBottomGameplayHud(screenW);
+    }
+
+    private void drawBottomGameplayHud(float screenW) {
         float x = HUD_MARGIN;
         float y = HUD_MARGIN;
         float width = screenW - HUD_MARGIN * 2f;
@@ -410,62 +418,390 @@ public class FactoryShellApp extends SimpleApplication {
                 ? new ColorRGBA(0.08f, 0.88f, 0.78f, 1f)
                 : new ColorRGBA(1f, 0.63f, 0.42f, 1f);
 
-        gameplayHudGui.attachChild(guiQuad("bottom_hud_bg", x, y, width, height,
-                colorMaterial(new ColorRGBA(0.018f, 0.023f, 0.052f, 0.88f)), 0.50f));
-        gameplayHudGui.attachChild(guiQuad("bottom_hud_inner", x + 3f, y + 3f, width - 6f, height - 6f,
-                colorMaterial(new ColorRGBA(0.042f, 0.052f, 0.095f, 0.90f)), 0.55f));
-        gameplayHudGui.attachChild(guiQuad("bottom_hud_topline", x, y + height - 3f, width, 3f,
-                colorMaterial(accent), 0.70f));
+        drawHudFrame("bottom_hud", x, y, width, height, accent);
 
-        float turnW = 188f;
-        gameplayHudGui.attachChild(guiQuad("turn_chip_bg", x + 14f, y + 16f, turnW, height - 30f,
-                colorMaterial(new ColorRGBA(accent.r * 0.16f, accent.g * 0.16f, accent.b * 0.18f, 0.96f)),
-                0.72f));
-        gameplayHudGui.attachChild(guiQuad("turn_chip_bar", x + 14f, y + 16f, 4f, height - 30f,
-                colorMaterial(accent), 0.76f));
-        gameplayHudGui.attachChild(guiText("CURRENT TURN", x + 30f, y + 61f, 12f,
-                new ColorRGBA(0.68f, 0.74f, 0.88f, 1f)));
-        gameplayHudGui.attachChild(guiText(shortText(game.getCurrent().getName(), 16), x + 30f, y + 36f, 20f,
-                new ColorRGBA(0.98f, 0.98f, 1f, 1f)));
+        float gap = 12f;
+        float turnW = clamp(width * 0.17f, 220f, 290f);
+        float actionW = clamp(width * 0.20f, 285f, 360f);
+        float sideButtonW = 34f;
+        float actionX = x + width - actionW - sideButtonW - gap - 16f;
+        float turnX = x + 16f;
+        float innerY = y + 12f;
+        float innerH = height - 24f;
+        float eventX = turnX + turnW + gap;
+        float eventW = actionX - eventX - gap;
 
-        float actionW = 260f;
-        float actionX = x + width - actionW - 14f;
-        gameplayHudGui.attachChild(guiQuad("roll_action_bg", actionX, y + 16f, actionW, height - 30f,
-                colorMaterial(new ColorRGBA(0.16f, 0.09f, 0.28f, 0.96f)), 0.72f));
-        gameplayHudGui.attachChild(guiQuad("roll_action_glow", actionX, y + height - 17f, actionW, 3f,
-                colorMaterial(new ColorRGBA(0.82f, 0.54f, 1f, 1f)), 0.80f));
-        gameplayHudGui.attachChild(guiText("[SPACE] ROLL", actionX + 26f, y + 57f, 20f,
-                new ColorRGBA(0.98f, 0.96f, 1f, 1f)));
-        gameplayHudGui.attachChild(guiText("P  POWERUP     R  CAMERA", actionX + 26f, y + 31f, 12f,
-                new ColorRGBA(0.66f, 0.70f, 0.86f, 1f)));
+        drawHudFrame("turn_chip", turnX, innerY, turnW, innerH, accent);
+        gameplayHudGui.attachChild(guiText("CURRENT TURN", turnX + 14f, innerY + innerH - 18f, 12f, accent));
+        gameplayHudGui.attachChild(guiText(shortText(game.getCurrent().getName(), maxTextChars(turnW - 92f, 11f)),
+                turnX + 14f, innerY + 35f, 24f, new ColorRGBA(1f, 0.88f, 0.72f, 1f)));
+        drawIconSlot("turn_role_slot", turnX + turnW - 72f, innerY + 15f, 58f,
+                accent, roleInitial(game.getCurrent()), roleIconPath(game.getCurrent().getRole()));
 
-        float eventX = x + turnW + 34f;
-        float eventW = actionX - eventX - 18f;
-        gameplayHudGui.attachChild(guiText(shortText(lastRollText, 96), eventX, y + 66f, 15f,
-                new ColorRGBA(0.91f, 0.94f, 1f, 1f)));
+        gameplayHudGui.attachChild(guiQuad("last_roll_marker", eventX, y + height - 35f, 3f, 22f,
+                colorMaterial(accent), 0.88f));
+        gameplayHudGui.attachChild(guiText(shortText(lastRollText.toUpperCase(), maxTextChars(eventW, 9f)),
+                eventX + 14f, y + height - 18f, 14f, new ColorRGBA(0.94f, 0.96f, 1f, 1f)));
 
-        float rowY = y + 19f;
-        float rowGap = 8f;
+        float rowY = innerY + 10f;
+        float rowGap = 10f;
         float rowW = (eventW - rowGap * (HUD_BOTTOM_EVENT_COUNT - 1)) / HUD_BOTTOM_EVENT_COUNT;
         for (int i = 0; i < HUD_BOTTOM_EVENT_COUNT; i++) {
             HudEvent event = i < eventLog.size() ? eventLog.get(i) : null;
             float rowX = eventX + i * (rowW + rowGap);
             ColorRGBA rowAccent = event == null
-                    ? new ColorRGBA(0.12f, 0.15f, 0.22f, 1f)
+                    ? new ColorRGBA(0.10f, 0.14f, 0.20f, 1f)
                     : event.accent;
-            gameplayHudGui.attachChild(guiQuad("bottom_event_" + i, rowX, rowY, rowW, 32f,
-                    colorMaterial(new ColorRGBA(0.055f, 0.066f, 0.12f, 0.86f)), 0.72f));
-            gameplayHudGui.attachChild(guiQuad("bottom_event_bar_" + i, rowX, rowY, 3f, 32f,
-                    colorMaterial(rowAccent), 0.78f));
+            drawHudFrame("bottom_event_" + i, rowX, rowY, rowW, 44f, rowAccent);
             if (event != null) {
-                gameplayHudGui.attachChild(guiText(shortText(event.title, 18), rowX + 12f, rowY + 23f, 11f,
+                drawIconSlot("bottom_event_icon_" + i, rowX + 10f, rowY + 8f, 28f,
+                        rowAccent, event.title.substring(0, 1), eventIconPath(event.title));
+                gameplayHudGui.attachChild(guiText(shortText(event.title, maxTextChars(rowW - 56f, 8f)),
+                        rowX + 48f, rowY + 31f, 12f,
                         new ColorRGBA(0.96f, 0.96f, 1f, 1f)));
-                gameplayHudGui.attachChild(guiText(shortText(event.detail, 30), rowX + 12f, rowY + 9f, 10f,
+                gameplayHudGui.attachChild(guiText(shortText(event.detail, maxTextChars(rowW - 56f, 7f)),
+                        rowX + 48f, rowY + 14f, 11f,
                         new ColorRGBA(0.68f, 0.74f, 0.88f, 1f)));
+            }
+        }
+
+        drawHudFrame("roll_action", actionX, innerY, actionW, innerH, new ColorRGBA(0.82f, 0.54f, 1f, 1f));
+        drawIconSlot("roll_dice_slot", actionX + 18f, innerY + 24f, 42f,
+                new ColorRGBA(0.82f, 0.54f, 1f, 1f), "D", "Textures/ui/icon-dice.png");
+        gameplayHudGui.attachChild(guiText("SPACE ROLL", actionX + 74f, innerY + 54f, 26f,
+                new ColorRGBA(0.98f, 0.95f, 1f, 1f)));
+        gameplayHudGui.attachChild(guiText("P POWERUP   |   R CAMERA", actionX + 76f, innerY + 23f, 13f,
+                new ColorRGBA(0.76f, 0.70f, 0.92f, 1f)));
+
+        float buttonX = actionX + actionW + gap;
+        drawIconSlot("help_slot", buttonX, innerY + innerH - 34f, 28f, accent, "?",
+                "Textures/ui/icon-help.png");
+        drawIconSlot("settings_slot", buttonX, innerY + 6f, 28f, accent, "*",
+                "Textures/ui/icon-settings.png");
+    }
+
+    private void drawTopGameplayHud(float screenW, float screenH) {
+        float x = HUD_MARGIN;
+        float width = screenW - HUD_MARGIN * 2f;
+        float height = HUD_TOP_HEIGHT;
+        float y = screenH - HUD_MARGIN - height;
+        float contentW = width;
+        float panelH = height;
+        float gap = 12f;
+        float statW = clamp(contentW * 0.32f, 300f, 430f);
+        float cardsW = contentW - statW * 2f - gap * 2f;
+
+        ColorRGBA playerAccent = new ColorRGBA(0.08f, 0.88f, 0.78f, 1f);
+        ColorRGBA opponentAccent = new ColorRGBA(1f, 0.63f, 0.42f, 1f);
+
+        drawTopMonsterPanel("top_player", "PLAYER", game.getPlayer(), x, y,
+                statW, panelH, playerAccent, game.getCurrent() == game.getPlayer());
+        drawTopCardReference(x + statW + gap, y, cardsW, panelH);
+        drawTopMonsterPanel("top_opponent", "OPPONENT", game.getOpponent(),
+                x + statW + gap + cardsW + gap, y,
+                statW, panelH, opponentAccent, game.getCurrent() == game.getOpponent());
+    }
+
+    private void drawTopMonsterPanel(String prefix, String label, Monster monster,
+                                     float x, float y, float width, float height,
+                                     ColorRGBA accent, boolean current) {
+        drawHudFrame(prefix, x, y, width, height, accent);
+
+        if (current) {
+            gameplayHudGui.attachChild(guiQuad(prefix + "_turn_glow", x + 14f, y + height - 31f,
+                    width - 28f, 19f,
+                    colorMaterial(new ColorRGBA(accent.r * 0.28f, accent.g * 0.28f, accent.b * 0.34f, 0.94f)),
+                    0.76f));
+            gameplayHudGui.attachChild(guiText("CURRENT TURN", x + width - 116f, y + height - 17f, 10f,
+                    new ColorRGBA(0.98f, 0.96f, 1f, 1f)));
+        }
+
+        float portrait = clamp(Math.min(height * 0.40f, width * 0.22f), 54f, 72f);
+        float portraitX = x + 22f;
+        float portraitY = y + height - portrait - 48f;
+        float textX = portraitX + portrait + 18f;
+        float valueX = x + width - 112f;
+        int nameChars = maxTextChars(valueX - textX - 8f, 11f);
+        String energyText = monster.getEnergy() + " / " + Constants.WINNING_ENERGY;
+        float energyRatio = clamp(monster.getEnergy() / (float) Constants.WINNING_ENERGY, 0f, 1f);
+        float energyX = textX;
+        float energyY = y + height - 114f;
+        float energyW = Math.max(70f, valueX - textX - 16f);
+
+        gameplayHudGui.attachChild(guiText(label, textX, y + height - 25f, 12f, accent));
+        drawPortraitSlot(prefix + "_portrait", monster, portraitX, portraitY, portrait, accent);
+        gameplayHudGui.attachChild(guiText(shortText(monster.getName(), nameChars), textX, y + height - 53f,
+                24f, new ColorRGBA(0.98f, 0.98f, 1f, 1f)));
+        gameplayHudGui.attachChild(guiText(monsterTitle(monster), textX, y + height - 76f, 13f,
+                new ColorRGBA(0.72f, 0.78f, 0.95f, 1f)));
+
+        gameplayHudGui.attachChild(guiText(energyText, valueX, y + height - 65f, 13f,
+                new ColorRGBA(0.92f, 0.93f, 1f, 1f)));
+        gameplayHudGui.attachChild(guiText("CELL " + monster.getPosition() + " / " + Constants.WINNING_POSITION,
+                valueX, y + height - 91f, 13f, new ColorRGBA(0.92f, 0.93f, 1f, 1f)));
+        drawEnergyBar(prefix + "_energy", energyX, energyY, energyW, 13f, energyRatio, accent);
+
+        String status = shortText(statusSummary(monster).toUpperCase(), maxTextChars(width - 86f, 8f));
+        float statusY = y + 18f;
+        gameplayHudGui.attachChild(guiQuad(prefix + "_status_bg", x + 22f, statusY, width - 44f, 30f,
+                colorMaterial(new ColorRGBA(accent.r * 0.12f, accent.g * 0.14f, accent.b * 0.18f, 0.90f)),
+                0.76f));
+        drawIconSlot(prefix + "_status_icon", x + 36f, statusY + 6f, 18f, accent, "S",
+                "Textures/ui/icon-status.png");
+        gameplayHudGui.attachChild(guiText(status, x + 66f, statusY + 20f, 12f,
+                new ColorRGBA(0.94f, 0.96f, 1f, 1f)));
+    }
+
+    private void drawTopCardReference(float x, float y, float width, float height) {
+        ColorRGBA accent = new ColorRGBA(0.82f, 0.54f, 1f, 1f);
+        drawHudFrame("top_cards", x, y, width, height, accent);
+        gameplayHudGui.attachChild(guiText("CARD EFFECTS", x + 28f, y + height - 24f, 18f,
+                new ColorRGBA(0.98f, 0.96f, 1f, 1f)));
+        gameplayHudGui.attachChild(guiText("REFERENCE BOARD", x + width - 130f, y + height - 24f, 10f,
+                new ColorRGBA(0.66f, 0.72f, 0.88f, 1f)));
+
+        String[][] cards = cardRows();
+        ColorRGBA[] colors = cardColors();
+        float boardSize = width > 520f ? 94f : 0f;
+        float rowX = x + 26f;
+        float rowW = width - 52f - (boardSize > 0f ? boardSize + 26f : 0f);
+        float rowH = 18f;
+        float rowGap = 6f;
+        float rowY = y + height - 62f;
+        float nameW = clamp(rowW * 0.34f, 94f, 150f);
+        int detailChars = maxTextChars(rowW - nameW - 24f, 6.5f);
+
+        for (int i = 0; i < cards.length; i++) {
+            boolean highlighted = cards[i][0].equals(lastCardHighlight);
+            ColorRGBA rowAccent = colors[i];
+            ColorRGBA bg = highlighted
+                    ? new ColorRGBA(rowAccent.r * 0.24f, rowAccent.g * 0.24f, rowAccent.b * 0.24f, 0.98f)
+                    : new ColorRGBA(0.055f, 0.066f, 0.12f, 0.86f);
+            float currentY = rowY - i * (rowH + rowGap);
+
+            gameplayHudGui.attachChild(guiQuad("top_card_row_" + i, rowX, currentY, rowW, rowH,
+                    colorMaterial(bg), 0.76f));
+            drawIconSlot("top_card_icon_" + i, rowX + 6f, currentY + 3f, 12f,
+                    rowAccent, cardInitial(cards[i][0]), cardIconPath(cards[i][0]));
+            gameplayHudGui.attachChild(guiText(shortText(cards[i][0], maxTextChars(nameW, 6.6f)),
+                    rowX + 28f, currentY + 13f, 11f,
+                    highlighted ? rowAccent : new ColorRGBA(0.94f, 0.94f, 1f, 1f)));
+            gameplayHudGui.attachChild(guiText(shortText(cards[i][1], detailChars),
+                    rowX + nameW + 28f, currentY + 13f, 11f,
+                    new ColorRGBA(0.68f, 0.74f, 0.88f, 1f)));
+        }
+
+        if (boardSize > 0f) {
+            drawMiniReferenceBoard("card_ref_board", x + width - boardSize - 32f,
+                    y + 30f, boardSize, colors);
+        }
+    }
+
+    private void drawHudFrame(String prefix, float x, float y, float width, float height, ColorRGBA accent) {
+        gameplayHudGui.attachChild(guiQuad(prefix + "_shadow", x + 4f, y - 4f, width, height,
+                colorMaterial(new ColorRGBA(0f, 0f, 0f, 0.32f)), 0.48f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_bg", x, y, width, height,
+                colorMaterial(new ColorRGBA(0.006f, 0.012f, 0.022f, 0.88f)), 0.50f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_inner", x + 6f, y + 6f, width - 12f, height - 12f,
+                colorMaterial(new ColorRGBA(0.026f, 0.040f, 0.070f, 0.78f)), 0.54f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_top", x + 8f, y + height - 4f, width - 16f, 3f,
+                colorMaterial(accent), 0.84f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_bottom", x + 8f, y + 1f, width - 16f, 2f,
+                colorMaterial(new ColorRGBA(accent.r, accent.g, accent.b, 0.72f)), 0.84f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_left", x + 1f, y + 8f, 3f, height - 16f,
+                colorMaterial(new ColorRGBA(accent.r, accent.g, accent.b, 0.72f)), 0.84f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_right", x + width - 4f, y + 8f, 3f, height - 16f,
+                colorMaterial(new ColorRGBA(accent.r, accent.g, accent.b, 0.72f)), 0.84f));
+
+        float corner = Math.min(34f, Math.min(width, height) * 0.24f);
+        gameplayHudGui.attachChild(guiQuad(prefix + "_tl_h", x, y + height - 10f, corner, 3f,
+                colorMaterial(accent), 0.88f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_tl_v", x + 7f, y + height - corner, 3f, corner,
+                colorMaterial(accent), 0.88f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_tr_h", x + width - corner, y + height - 10f, corner, 3f,
+                colorMaterial(accent), 0.88f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_tr_v", x + width - 10f, y + height - corner, 3f, corner,
+                colorMaterial(accent), 0.88f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_bl_h", x, y + 7f, corner, 3f,
+                colorMaterial(accent), 0.88f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_bl_v", x + 7f, y, 3f, corner,
+                colorMaterial(accent), 0.88f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_br_h", x + width - corner, y + 7f, corner, 3f,
+                colorMaterial(accent), 0.88f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_br_v", x + width - 10f, y, 3f, corner,
+                colorMaterial(accent), 0.88f));
+    }
+
+    private void drawPortraitSlot(String prefix, Monster monster, float x, float y, float size, ColorRGBA accent) {
+        String initial = monster.getName() == null || monster.getName().isEmpty()
+                ? "?" : monster.getName().substring(0, 1).toUpperCase();
+        drawIconSlot(prefix, x, y, size, accent, initial, portraitPathForMonster(monster));
+    }
+
+    private void drawIconSlot(String prefix, float x, float y, float size,
+                              ColorRGBA accent, String fallbackText, String texturePath) {
+        gameplayHudGui.attachChild(guiQuad(prefix + "_outer", x, y, size, size,
+                colorMaterial(new ColorRGBA(accent.r * 0.28f, accent.g * 0.28f, accent.b * 0.30f, 0.96f)),
+                0.86f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_inner", x + 3f, y + 3f, size - 6f, size - 6f,
+                colorMaterial(new ColorRGBA(0.020f, 0.032f, 0.052f, 0.96f)), 0.88f));
+
+        Material texture = textureMaterial(texturePath);
+        if (texture != null) {
+            gameplayHudGui.attachChild(guiQuad(prefix + "_image", x + 5f, y + 5f, size - 10f, size - 10f,
+                    texture, 0.90f));
+            return;
+        }
+
+        gameplayHudGui.attachChild(guiQuad(prefix + "_missing", x + 7f, y + 7f, size - 14f, size - 14f,
+                colorMaterial(new ColorRGBA(accent.r * 0.16f, accent.g * 0.16f, accent.b * 0.20f, 0.94f)),
+                0.90f));
+        if (fallbackText != null && !fallbackText.isEmpty()) {
+            float textSize = clamp(size * 0.42f, 8f, 28f);
+            float textX = x + size * (fallbackText.length() > 1 ? 0.27f : 0.37f);
+            gameplayHudGui.attachChild(guiText(fallbackText, textX, y + size * 0.62f,
+                    textSize, new ColorRGBA(0.96f, 0.98f, 1f, 1f)));
+        }
+    }
+
+    private Material textureMaterial(String texturePath) {
+        if (texturePath == null) {
+            return null;
+        }
+        try {
+            Texture texture = assetManager.loadTexture(texturePath);
+            texture.setMinFilter(Texture.MinFilter.Trilinear);
+            texture.setMagFilter(Texture.MagFilter.Bilinear);
+            Material material = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+            material.setTexture("ColorMap", texture);
+            material.getAdditionalRenderState().setBlendMode(RenderState.BlendMode.Alpha);
+            material.getAdditionalRenderState().setFaceCullMode(RenderState.FaceCullMode.Off);
+            return material;
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private String portraitPathForMonster(Monster monster) {
+        String name = monster.getName().toLowerCase();
+        if (name.contains("mike")) {
+            return "Textures/ui/mike-portrait.png";
+        }
+        if (name.contains("sullivan") || name.contains("sulley")) {
+            return "Textures/ui/sullivan-portrait.png";
+        }
+        if (name.contains("randall")) {
+            return "Textures/ui/randall-portrait.png";
+        }
+        if (name.contains("celia")) {
+            return "Textures/ui/celia-portrait.png";
+        }
+        if (name.contains("fungus")) {
+            return "Textures/ui/fungus-portrait.png";
+        }
+        if (name.contains("yeti")) {
+            return "Textures/ui/yeti-portrait.png";
+        }
+        return null;
+    }
+
+    private String roleIconPath(Role role) {
+        return role == Role.SCARER ? "Textures/ui/role-scarer.png" : "Textures/ui/role-laugher.png";
+    }
+
+    private String cardIconPath(String cardName) {
+        if ("ENERGY STEAL".equals(cardName)) {
+            return "Textures/ui/card-energy-steal.png";
+        }
+        if ("SHIELD".equals(cardName)) {
+            return "Textures/ui/card-shield.png";
+        }
+        if ("SWAPPER".equals(cardName)) {
+            return "Textures/ui/card-swapper.png";
+        }
+        if ("START OVER".equals(cardName)) {
+            return "Textures/ui/card-start-over.png";
+        }
+        if ("CONFUSION".equals(cardName)) {
+            return "Textures/ui/card-confusion.png";
+        }
+        return null;
+    }
+
+    private String eventIconPath(String title) {
+        if (title == null) {
+            return null;
+        }
+        String key = title.toLowerCase().replace(' ', '-');
+        return "Textures/ui/event-" + key + ".png";
+    }
+
+    private String monsterTitle(Monster monster) {
+        return (monster.getClass().getSimpleName() + " / " + monster.getRole().name()).toUpperCase();
+    }
+
+    private String roleInitial(Monster monster) {
+        String role = monster.getRole().name();
+        return role.isEmpty() ? "?" : role.substring(0, 1);
+    }
+
+    private String cardInitial(String cardName) {
+        if (cardName == null || cardName.isEmpty()) {
+            return "?";
+        }
+        if ("START OVER".equals(cardName)) {
+            return "O";
+        }
+        if ("SWAPPER".equals(cardName)) {
+            return "W";
+        }
+        return cardName.substring(0, 1);
+    }
+
+    private void drawEnergyBar(String prefix, float x, float y, float width, float height,
+                               float ratio, ColorRGBA accent) {
+        gameplayHudGui.attachChild(guiQuad(prefix + "_bg", x, y, width, height,
+                colorMaterial(new ColorRGBA(0.08f, 0.10f, 0.13f, 0.95f)), 0.78f));
+        if (ratio > 0f) {
+            gameplayHudGui.attachChild(guiQuad(prefix + "_fill", x, y, Math.max(3f, width * ratio), height,
+                    colorMaterial(accent), 0.84f));
+        }
+        int segments = 6;
+        for (int i = 1; i < segments; i++) {
+            float sx = x + width * i / segments;
+            gameplayHudGui.attachChild(guiQuad(prefix + "_tick_" + i, sx, y, 1f, height,
+                    colorMaterial(new ColorRGBA(0.006f, 0.012f, 0.022f, 0.76f)), 0.88f));
+        }
+    }
+
+    private void drawMiniReferenceBoard(String prefix, float x, float y, float size, ColorRGBA[] colors) {
+        drawHudFrame(prefix, x, y, size, size, new ColorRGBA(0.14f, 0.84f, 0.92f, 1f));
+        float gap = 3f;
+        float cell = (size - 26f - gap * 3f) / 4f;
+        float startX = x + 13f;
+        float startY = y + 13f;
+        for (int row = 0; row < 4; row++) {
+            for (int col = 0; col < 4; col++) {
+                int index = row * 4 + col;
+                ColorRGBA color = new ColorRGBA(0.035f, 0.052f, 0.074f, 0.96f);
+                if (index == 1 || index == 7 || index == 12) {
+                    color = new ColorRGBA(0.12f, 0.86f, 0.92f, 0.88f);
+                } else if (index == 5) {
+                    color = colors[2];
+                } else if (index == 10) {
+                    color = colors[4];
+                }
+                gameplayHudGui.attachChild(guiQuad(prefix + "_cell_" + index,
+                        startX + col * (cell + gap),
+                        startY + (3 - row) * (cell + gap),
+                        cell, cell, colorMaterial(color), 0.92f));
             }
         }
     }
 
+    private int maxTextChars(float width, float approximateCharWidth) {
+        return Math.max(4, (int) (width / approximateCharWidth));
+    }
 
     private String shortText(String text, int max) {
         if (text == null || text.length() <= max) {
@@ -762,62 +1098,17 @@ public class FactoryShellApp extends SimpleApplication {
     }
 
     private void refreshInfoPanels() {
-        refreshWallScreens();
         ensureGameplayHud();
     }
 
-    private void attachWallScreens() {
+    private void attachWorldDice() {
         if (screenRoot != null) {
             rootNode.detachChild(screenRoot);
         }
-        screenRoot = new Node("wall_screens");
+        screenRoot = new Node("dice_display");
         rootNode.attachChild(screenRoot);
 
-        playerScreenContent = createWallScreen("player_screen",
-                SCREEN_PLAYER_X, SCREEN_PLAYER_YAW);
-        opponentScreenContent = createWallScreen("opponent_screen",
-                SCREEN_OPPONENT_X, SCREEN_OPPONENT_YAW);
-        cardKioskContent = createCardKiosk();
         attachDice();
-    }
-
-    private Node createWallScreen(String name, float x, float yaw) {
-        Node container = new Node(name);
-        container.setLocalRotation(new Quaternion().fromAngles(0f, yaw, 0f));
-        container.setLocalTranslation(x, SCREEN_Y, SCREEN_Z);
-
-        Spatial frame = loadFactoryModel(PLAYER_SCREEN_MODEL);
-        float displayZ = SCREEN_DISPLAY_FRONT_GAP;
-        frame.updateModelBound();
-        if (frame.getWorldBound() instanceof BoundingBox) {
-            BoundingBox bounds = (BoundingBox) frame.getWorldBound();
-            float modelWidth = bounds.getXExtent() * 2f;
-            float scale = modelWidth > 0f ? SCREEN_TARGET_WIDTH / modelWidth : 1f;
-            frame.setLocalScale(scale);
-            Vector3f c = bounds.getCenter();
-            frame.setLocalTranslation(-c.x * scale, -c.y * scale, -c.z * scale);
-            displayZ = bounds.getZExtent() * scale + SCREEN_DISPLAY_FRONT_GAP;
-        }
-        container.attachChild(frame);
-
-        Node content = new Node(name + "_content");
-        content.setLocalTranslation(
-                -SCREEN_DISPLAY_WIDTH * 0.5f,
-                SCREEN_DISPLAY_CENTER_Y - SCREEN_DISPLAY_HEIGHT * 0.5f,
-                displayZ);
-        container.attachChild(content);
-        screenRoot.attachChild(container);
-        return content;
-    }
-
-    private Node createCardKiosk() {
-        Node container = new Node("card_effects_kiosk");
-        container.setLocalTranslation(
-                -CARD_KIOSK_WIDTH * 0.5f,
-                CARD_KIOSK_Y - CARD_KIOSK_HEIGHT * 0.5f,
-                CARD_KIOSK_Z);
-        screenRoot.attachChild(container);
-        return container;
     }
 
     private void attachDice() {
@@ -839,144 +1130,6 @@ public class FactoryShellApp extends SimpleApplication {
         screenRoot.attachChild(diceNode);
     }
 
-    private void refreshWallScreens() {
-        if (game == null || playerScreenContent == null || opponentScreenContent == null
-                || cardKioskContent == null) {
-            return;
-        }
-        populateWallScreen(playerScreenContent, "PLAYER", game.getPlayer(),
-                new ColorRGBA(0.08f, 0.88f, 0.78f, 1f));
-        populateWallScreen(opponentScreenContent, "OPPONENT", game.getOpponent(),
-                new ColorRGBA(1f, 0.63f, 0.42f, 1f));
-        populateCardKiosk(cardKioskContent);
-    }
-
-    private void populateWallScreen(Node content, String label, Monster monster, ColorRGBA accent) {
-        content.detachAllChildren();
-
-        float W = SCREEN_DISPLAY_WIDTH;
-        float H = SCREEN_DISPLAY_HEIGHT;
-        drawWorldPanelFrame(content, "screen", W, H, accent);
-
-        boolean current = game.getCurrent() == monster;
-        if (current) {
-            content.attachChild(panelQuad("scr_current_glow", 0.17f, H - 0.34f, W - 0.34f, 0.19f,
-                    colorMaterial(new ColorRGBA(accent.r * 0.35f, accent.g * 0.35f, accent.b * 0.40f, 0.92f)),
-                    0.024f));
-            content.attachChild(panelText("CURRENT TURN", 0.31f, H - 0.20f, 0.105f,
-                    new ColorRGBA(0.99f, 0.96f, 1f, 1f), 0.040f));
-        }
-
-        float avatarSize = 0.70f;
-        float avatarX = 0.24f;
-        float avatarY = H - 1.12f;
-        content.attachChild(panelQuad("scr_avatar_ring", avatarX - 0.05f, avatarY - 0.05f,
-                avatarSize + 0.10f, avatarSize + 0.10f, colorMaterial(accent), 0.026f));
-        Material portrait = portraitMaterial(monster);
-        content.attachChild(panelQuad("scr_avatar_bg", avatarX, avatarY, avatarSize, avatarSize,
-                portrait != null
-                        ? portrait
-                        : colorMaterial(new ColorRGBA(accent.r * 0.20f, accent.g * 0.20f, accent.b * 0.22f, 0.99f)),
-                0.032f));
-        String initial = monster.getName() == null || monster.getName().isEmpty()
-                ? "?" : monster.getName().substring(0, 1).toUpperCase();
-        if (portrait == null) {
-            content.attachChild(panelText(initial, avatarX + 0.23f, avatarY + 0.24f, 0.46f,
-                    new ColorRGBA(0.97f, 0.98f, 1f, 1f), 0.046f));
-        }
-
-        float identityX = avatarX + avatarSize + 0.22f;
-        content.attachChild(panelText(label, identityX, H - 0.58f, 0.135f,
-                accent, 0.040f));
-        content.attachChild(panelText(monster.getRole().name(), identityX, H - 0.86f, 0.165f,
-                new ColorRGBA(0.72f, 0.78f, 0.95f, 1f), 0.040f));
-
-        String name = shortText(monster.getName(), 15);
-        content.attachChild(panelText(name, 0.24f, H - 1.47f, 0.22f,
-                new ColorRGBA(0.98f, 0.98f, 1f, 1f), 0.040f));
-
-        float energyY = 1.54f;
-        float energyH = 0.15f;
-        float energyW = W - 0.48f;
-        float energyX = 0.24f;
-        float energyRatio = clamp(monster.getEnergy() / (float) Constants.WINNING_ENERGY, 0f, 1f);
-        String energyText = monster.getEnergy() + " / " + Constants.WINNING_ENERGY;
-        content.attachChild(panelText("ENERGY", energyX, energyY + 0.34f, 0.115f,
-                new ColorRGBA(0.66f, 0.74f, 0.90f, 1f), 0.040f));
-        content.attachChild(panelText(energyText, energyX + energyW - 0.88f, energyY + 0.34f, 0.115f,
-                new ColorRGBA(0.92f, 0.93f, 1f, 1f), 0.040f));
-        content.attachChild(panelQuad("scr_energy_bg", energyX, energyY, energyW, energyH,
-                colorMaterial(new ColorRGBA(0.10f, 0.13f, 0.20f, 0.98f)), 0.028f));
-        if (monster.getEnergy() > 0) {
-            content.attachChild(panelQuad("scr_energy_fill", energyX, energyY,
-                    Math.max(0.04f, energyW * energyRatio), energyH,
-                    colorMaterial(accent), 0.034f));
-        }
-
-        String position = "CELL " + monster.getPosition() + " / " + Constants.WINNING_POSITION;
-        content.attachChild(panelText(position, 0.24f, 1.02f, 0.145f,
-                new ColorRGBA(0.74f, 0.80f, 0.95f, 1f), 0.040f));
-
-        String statusChip = shortText(statusSummary(monster), 22).toUpperCase();
-        content.attachChild(panelQuad("scr_status_chip", 0.20f, 0.42f, W - 0.40f, 0.28f,
-                colorMaterial(new ColorRGBA(accent.r * 0.24f, accent.g * 0.24f, accent.b * 0.30f, 0.96f)),
-                0.028f));
-        content.attachChild(panelText(statusChip, 0.34f, 0.61f, 0.105f,
-                new ColorRGBA(0.98f, 0.98f, 1f, 1f), 0.040f));
-    }
-
-    private void populateCardKiosk(Node content) {
-        content.detachAllChildren();
-
-        float W = CARD_KIOSK_WIDTH;
-        float H = CARD_KIOSK_HEIGHT;
-        ColorRGBA accent = new ColorRGBA(0.82f, 0.54f, 1f, 1f);
-        drawWorldPanelFrame(content, "cards", W, H, accent);
-        content.attachChild(panelText("CARD EFFECTS", 0.34f, H - 0.34f, 0.25f,
-                new ColorRGBA(0.98f, 0.96f, 1f, 1f), 0.040f));
-        content.attachChild(panelText("reference board", W - 1.32f, H - 0.39f, 0.13f,
-                new ColorRGBA(0.66f, 0.72f, 0.88f, 1f), 0.040f));
-
-        String[][] cards = cardRows();
-        ColorRGBA[] colors = cardColors();
-        float rowH = 0.47f;
-        float rowGap = 0.08f;
-        float startY = H - 0.96f;
-        for (int i = 0; i < cards.length; i++) {
-            float rowY = startY - i * (rowH + rowGap) - rowH;
-            boolean highlighted = cards[i][0].equals(lastCardHighlight);
-            ColorRGBA rowAccent = colors[i];
-            ColorRGBA bg = highlighted
-                    ? new ColorRGBA(rowAccent.r * 0.24f, rowAccent.g * 0.24f, rowAccent.b * 0.24f, 0.98f)
-                    : new ColorRGBA(0.055f, 0.065f, 0.12f, 0.94f);
-
-            content.attachChild(panelQuad("card_row_" + i, 0.28f, rowY, W - 0.56f, rowH,
-                    colorMaterial(bg), 0.028f));
-            content.attachChild(panelQuad("card_row_bar_" + i, 0.28f, rowY, 0.06f, rowH,
-                    colorMaterial(rowAccent), 0.034f));
-            content.attachChild(panelQuad("card_row_icon_" + i, 0.46f, rowY + 0.10f, 0.28f, 0.28f,
-                    colorMaterial(new ColorRGBA(rowAccent.r, rowAccent.g, rowAccent.b, highlighted ? 1f : 0.82f)),
-                    0.036f));
-            content.attachChild(panelText(cards[i][0], 0.86f, rowY + 0.33f, 0.16f,
-                    highlighted ? rowAccent : new ColorRGBA(0.94f, 0.94f, 1f, 1f), 0.044f));
-            content.attachChild(panelText(cards[i][1], 0.86f, rowY + 0.13f, 0.12f,
-                    new ColorRGBA(0.68f, 0.74f, 0.88f, 1f), 0.044f));
-        }
-    }
-
-    private void drawWorldPanelFrame(Node content, String prefix, float width, float height, ColorRGBA accent) {
-        content.attachChild(panelQuad(prefix + "_shadow", -0.06f, -0.06f, width + 0.12f, height + 0.12f,
-                colorMaterial(new ColorRGBA(0f, 0f, 0f, 0.36f)), 0.006f));
-        content.attachChild(panelQuad(prefix + "_bg", 0f, 0f, width, height,
-                colorMaterial(new ColorRGBA(0.025f, 0.032f, 0.075f, 0.97f)), 0.012f));
-        content.attachChild(panelQuad(prefix + "_inner", 0.06f, 0.06f, width - 0.12f, height - 0.12f,
-                colorMaterial(new ColorRGBA(0.046f, 0.056f, 0.112f, 0.96f)), 0.018f));
-        content.attachChild(panelQuad(prefix + "_top_accent", 0f, height - 0.05f, width, 0.05f,
-                colorMaterial(accent), 0.030f));
-        content.attachChild(panelQuad(prefix + "_side_accent", 0f, 0f, 0.05f, height,
-                colorMaterial(new ColorRGBA(0.04f, 0.88f, 0.82f, 1f)), 0.030f));
-    }
-
     private String[][] cardRows() {
         return new String[][] {
                 {"ENERGY STEAL", "Steal 150 energy"},
@@ -995,54 +1148,6 @@ public class FactoryShellApp extends SimpleApplication {
                 new ColorRGBA(1f,    0.36f, 0.24f, 1f),
                 new ColorRGBA(0.26f, 1f,    0.78f, 1f)
         };
-    }
-
-    private Geometry panelQuad(String name, float x, float y, float width, float height,
-                               Material material, float z) {
-        Geometry quad = new Geometry(name, new Quad(width, height));
-        quad.setLocalTranslation(x, y, z);
-        quad.setQueueBucket(RenderQueue.Bucket.Transparent);
-        quad.setMaterial(material);
-        return quad;
-    }
-
-    private BitmapText panelText(String text, float x, float baselineY, float size,
-                                 ColorRGBA color, float z) {
-        BitmapFont font = assetManager.loadFont("Interface/Fonts/Default.fnt");
-        BitmapText label = new BitmapText(font, false);
-        label.setText(text);
-        label.setSize(size);
-        label.setColor(color);
-        label.setLocalTranslation(x, baselineY, z);
-        label.setQueueBucket(RenderQueue.Bucket.Transparent);
-        return label;
-    }
-
-    private Material portraitMaterial(Monster monster) {
-        String portraitPath = portraitPathForMonster(monster);
-        if (portraitPath == null) {
-            return null;
-        }
-        try {
-            Texture texture = assetManager.loadTexture(portraitPath);
-            texture.setMinFilter(Texture.MinFilter.Trilinear);
-            texture.setMagFilter(Texture.MagFilter.Bilinear);
-            Material material = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
-            material.setTexture("ColorMap", texture);
-            material.getAdditionalRenderState().setBlendMode(RenderState.BlendMode.Alpha);
-            material.getAdditionalRenderState().setFaceCullMode(RenderState.FaceCullMode.Off);
-            return material;
-        } catch (RuntimeException e) {
-            return null;
-        }
-    }
-
-    private String portraitPathForMonster(Monster monster) {
-        String name = monster.getName().toLowerCase();
-        if (name.contains("yeti")) {
-            return "Textures/ui/yeti-portrait.png";
-        }
-        return null;
     }
 
     private Material colorMaterial(ColorRGBA color) {

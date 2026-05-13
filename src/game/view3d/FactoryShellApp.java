@@ -111,7 +111,7 @@ public class FactoryShellApp extends SimpleApplication {
     private static final float TOKEN_FORWARD_YAW_OFFSET = 0f;
     private static final float HUD_MARGIN = 18f;
     private static final float HUD_TOP_HEIGHT = 172f;
-    private static final float HUD_BOTTOM_HEIGHT = 112f;
+    private static final float HUD_BOTTOM_HEIGHT = 68f;
     private static final int HUD_BOTTOM_EVENT_COUNT = 3;
     private static final String[] MONSTER_CELL_MODELS = {
             "Models/boardcells/monstercells/Mike Wazowski Cell.glb",
@@ -122,7 +122,7 @@ public class FactoryShellApp extends SimpleApplication {
             "Models/boardcells/monstercells/yeti.glb"
     };
 
-    private static final float CAMERA_WIDE_FOV = 48f;
+    private static final float CAMERA_WIDE_FOV = 57f;
     private static final float CAMERA_FOCUS_FOV = 37f;
     private static final float CAMERA_INTRO_ZOOM_TIME = 1.35f;
     private static final float CAMERA_INTRO_ORBIT_TIME = 4.00f;
@@ -237,7 +237,23 @@ public class FactoryShellApp extends SimpleApplication {
         FactoryShellApp app = new FactoryShellApp();
         app.setSettings(buildSettings());
         app.setShowSettings(false);
+        for (String arg : args) {
+            if (arg.startsWith("--role=")) {
+                String r = arg.substring(7);
+                app.setPreselectedRole(r.equals("scarer") ? Role.SCARER : Role.LAUGHER);
+            }
+        }
         app.start();
+    }
+
+    private Role preselectedRole = null;
+
+    public void setPreselectedRole(Role role) {
+        this.preselectedRole = role;
+    }
+
+    public static AppSettings buildPublicSettings() {
+        return buildSettings();
     }
 
     private static AppSettings buildSettings() {
@@ -266,12 +282,16 @@ public class FactoryShellApp extends SimpleApplication {
         loadFactoryShell();
         setupLights();
         setupInput();
-        showRoleSelectionMenu(null);
         setImmediateCamera(CameraMode.ROLE_SELECTION_VIEW,
                 new Vector3f(0f, 8.2f, 15.0f),
                 new Vector3f(0f, 1.05f, -1.6f),
                 46f);
         sceneReady = true;
+        if (preselectedRole != null) {
+            startBoardGame(preselectedRole);
+        } else {
+            showRoleSelectionMenu(null);
+        }
     }
 
     private void showRoleSelectionMenu(String error) {
@@ -411,7 +431,7 @@ public class FactoryShellApp extends SimpleApplication {
 
     private void drawBottomGameplayHud(float screenW) {
         float x = HUD_MARGIN;
-        float y = HUD_MARGIN;
+        float y = 8f;
         float width = screenW - HUD_MARGIN * 2f;
         float height = HUD_BOTTOM_HEIGHT;
         ColorRGBA accent = game.getCurrent() == game.getPlayer()
@@ -420,31 +440,47 @@ public class FactoryShellApp extends SimpleApplication {
 
         drawHudFrame("bottom_hud", x, y, width, height, accent);
 
-        float gap = 12f;
-        float turnW = clamp(width * 0.17f, 220f, 290f);
-        float actionW = clamp(width * 0.20f, 285f, 360f);
-        float sideButtonW = 34f;
-        float actionX = x + width - actionW - sideButtonW - gap - 16f;
-        float turnX = x + 16f;
-        float innerY = y + 12f;
-        float innerH = height - 24f;
+        float gap = 10f;
+        float turnW = clamp(width * 0.15f, 180f, 250f);
+        float actionW = clamp(width * 0.17f, 235f, 315f);
+        float sideButtonW = 28f;
+        float actionX = x + width - actionW - sideButtonW - gap - 12f;
+        float turnX = x + 12f;
+        float innerY = y + 8f;
+        float innerH = height - 16f;
         float eventX = turnX + turnW + gap;
         float eventW = actionX - eventX - gap;
 
         drawHudFrame("turn_chip", turnX, innerY, turnW, innerH, accent);
-        gameplayHudGui.attachChild(guiText("CURRENT TURN", turnX + 14f, innerY + innerH - 18f, 12f, accent));
+        gameplayHudGui.attachChild(guiText("CURRENT TURN", turnX + 12f, innerY + innerH - 13f, 10f, accent));
         gameplayHudGui.attachChild(guiText(shortText(game.getCurrent().getName(), maxTextChars(turnW - 92f, 11f)),
-                turnX + 14f, innerY + 35f, 24f, new ColorRGBA(1f, 0.88f, 0.72f, 1f)));
-        drawIconSlot("turn_role_slot", turnX + turnW - 72f, innerY + 15f, 58f,
+                turnX + 12f, innerY + 19f, 18f, new ColorRGBA(1f, 0.88f, 0.72f, 1f)));
+        float roleSize = 34f;
+        float roleIconX = turnX + turnW - roleSize - 12f;
+        float roleIconY = innerY + 9f;
+        float roleCut = (roleSize + 8f) * 0.22f;
+        ColorRGBA chipBg = new ColorRGBA(0.006f, 0.012f, 0.022f, 1f);
+        gameplayHudGui.attachChild(guiQuad("turn_role_diamond", roleIconX - 4f, roleIconY - 4f, roleSize + 8f, roleSize + 8f,
+                colorMaterial(new ColorRGBA(accent.r * 0.60f, accent.g * 0.60f, accent.b * 0.65f, 1f)), 0.82f));
+        gameplayHudGui.attachChild(guiQuad("turn_role_cut_tl", roleIconX - 4f, roleIconY + roleSize + 4f - roleCut, roleCut, roleCut,
+                colorMaterial(chipBg), 0.83f));
+        gameplayHudGui.attachChild(guiQuad("turn_role_cut_tr", roleIconX + roleSize + 4f - roleCut, roleIconY + roleSize + 4f - roleCut, roleCut, roleCut,
+                colorMaterial(chipBg), 0.83f));
+        gameplayHudGui.attachChild(guiQuad("turn_role_cut_bl", roleIconX - 4f, roleIconY - 4f, roleCut, roleCut,
+                colorMaterial(chipBg), 0.83f));
+        gameplayHudGui.attachChild(guiQuad("turn_role_cut_br", roleIconX + roleSize + 4f - roleCut, roleIconY - 4f, roleCut, roleCut,
+                colorMaterial(chipBg), 0.83f));
+        drawIconSlot("turn_role_slot", roleIconX, roleIconY, roleSize,
                 accent, roleInitial(game.getCurrent()), roleIconPath(game.getCurrent().getRole()));
 
-        gameplayHudGui.attachChild(guiQuad("last_roll_marker", eventX, y + height - 35f, 3f, 22f,
+        gameplayHudGui.attachChild(guiQuad("last_roll_marker", eventX, y + height - 22f, 3f, 14f,
                 colorMaterial(accent), 0.88f));
         gameplayHudGui.attachChild(guiText(shortText(lastRollText.toUpperCase(), maxTextChars(eventW, 9f)),
-                eventX + 14f, y + height - 18f, 14f, new ColorRGBA(0.94f, 0.96f, 1f, 1f)));
+                eventX + 12f, y + height - 10f, 12f, new ColorRGBA(0.94f, 0.96f, 1f, 1f)));
 
-        float rowY = innerY + 10f;
-        float rowGap = 10f;
+        float rowY = innerY + 5f;
+        float rowGap = 8f;
+        float rowH = 28f;
         float rowW = (eventW - rowGap * (HUD_BOTTOM_EVENT_COUNT - 1)) / HUD_BOTTOM_EVENT_COUNT;
         for (int i = 0; i < HUD_BOTTOM_EVENT_COUNT; i++) {
             HudEvent event = i < eventLog.size() ? eventLog.get(i) : null;
@@ -452,31 +488,29 @@ public class FactoryShellApp extends SimpleApplication {
             ColorRGBA rowAccent = event == null
                     ? new ColorRGBA(0.10f, 0.14f, 0.20f, 1f)
                     : event.accent;
-            drawHudFrame("bottom_event_" + i, rowX, rowY, rowW, 44f, rowAccent);
+            drawHudFrame("bottom_event_" + i, rowX, rowY, rowW, rowH, rowAccent);
             if (event != null) {
-                drawIconSlot("bottom_event_icon_" + i, rowX + 10f, rowY + 8f, 28f,
+                drawIconSlot("bottom_event_icon_" + i, rowX + 8f, rowY + 5f, 18f,
                         rowAccent, event.title.substring(0, 1), eventIconPath(event.title));
-                gameplayHudGui.attachChild(guiText(shortText(event.title, maxTextChars(rowW - 56f, 8f)),
-                        rowX + 48f, rowY + 31f, 12f,
+                String summary = event.title + ": " + event.detail;
+                gameplayHudGui.attachChild(guiText(shortText(summary, maxTextChars(rowW - 40f, 7f)),
+                        rowX + 34f, rowY + 18f, 11f,
                         new ColorRGBA(0.96f, 0.96f, 1f, 1f)));
-                gameplayHudGui.attachChild(guiText(shortText(event.detail, maxTextChars(rowW - 56f, 7f)),
-                        rowX + 48f, rowY + 14f, 11f,
-                        new ColorRGBA(0.68f, 0.74f, 0.88f, 1f)));
             }
         }
 
         drawHudFrame("roll_action", actionX, innerY, actionW, innerH, new ColorRGBA(0.82f, 0.54f, 1f, 1f));
-        drawIconSlot("roll_dice_slot", actionX + 18f, innerY + 24f, 42f,
+        drawIconSlot("roll_dice_slot", actionX + 14f, innerY + 10f, 30f,
                 new ColorRGBA(0.82f, 0.54f, 1f, 1f), "D", "Textures/ui/icon-dice.png");
-        gameplayHudGui.attachChild(guiText("SPACE ROLL", actionX + 74f, innerY + 54f, 26f,
+        gameplayHudGui.attachChild(guiText("SPACE ROLL", actionX + 54f, innerY + 33f, 20f,
                 new ColorRGBA(0.98f, 0.95f, 1f, 1f)));
-        gameplayHudGui.attachChild(guiText("P POWERUP   |   R CAMERA", actionX + 76f, innerY + 23f, 13f,
+        gameplayHudGui.attachChild(guiText("P POWERUP  |  R CAMERA", actionX + 56f, innerY + 13f, 11f,
                 new ColorRGBA(0.76f, 0.70f, 0.92f, 1f)));
 
         float buttonX = actionX + actionW + gap;
-        drawIconSlot("help_slot", buttonX, innerY + innerH - 34f, 28f, accent, "?",
+        drawIconSlot("help_slot", buttonX, innerY + innerH - 22f, 20f, accent, "?",
                 "Textures/ui/icon-help.png");
-        drawIconSlot("settings_slot", buttonX, innerY + 6f, 28f, accent, "*",
+        drawIconSlot("settings_slot", buttonX, innerY + 4f, 20f, accent, "*",
                 "Textures/ui/icon-settings.png");
     }
 
@@ -543,6 +577,8 @@ public class FactoryShellApp extends SimpleApplication {
 
         String status = shortText(statusSummary(monster).toUpperCase(), maxTextChars(width - 86f, 8f));
         float statusY = y + 18f;
+        gameplayHudGui.attachChild(guiQuad(prefix + "_status_border", x + 20f, statusY - 2f, width - 40f, 34f,
+                colorMaterial(new ColorRGBA(0.90f, 0.70f, 0.20f, 0.52f)), 0.74f));
         gameplayHudGui.attachChild(guiQuad(prefix + "_status_bg", x + 22f, statusY, width - 44f, 30f,
                 colorMaterial(new ColorRGBA(accent.r * 0.12f, accent.g * 0.14f, accent.b * 0.18f, 0.90f)),
                 0.76f));
@@ -605,7 +641,9 @@ public class FactoryShellApp extends SimpleApplication {
         gameplayHudGui.attachChild(guiQuad(prefix + "_inner", x + 6f, y + 6f, width - 12f, height - 12f,
                 colorMaterial(new ColorRGBA(0.026f, 0.040f, 0.070f, 0.78f)), 0.54f));
         gameplayHudGui.attachChild(guiQuad(prefix + "_top", x + 8f, y + height - 4f, width - 16f, 3f,
-                colorMaterial(accent), 0.84f));
+                colorMaterial(accent), 0.92f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_top_glow", x + 10f, y + height - 9f, width - 20f, 6f,
+                colorMaterial(new ColorRGBA(accent.r, accent.g, accent.b, 0.20f)), 0.82f));
         gameplayHudGui.attachChild(guiQuad(prefix + "_bottom", x + 8f, y + 1f, width - 16f, 2f,
                 colorMaterial(new ColorRGBA(accent.r, accent.g, accent.b, 0.72f)), 0.84f));
         gameplayHudGui.attachChild(guiQuad(prefix + "_left", x + 1f, y + 8f, 3f, height - 16f,
@@ -635,6 +673,21 @@ public class FactoryShellApp extends SimpleApplication {
     private void drawPortraitSlot(String prefix, Monster monster, float x, float y, float size, ColorRGBA accent) {
         String initial = monster.getName() == null || monster.getName().isEmpty()
                 ? "?" : monster.getName().substring(0, 1).toUpperCase();
+        float frame = size + 8f;
+        float fx = x - 4f;
+        float fy = y - 4f;
+        float cut = frame * 0.22f;
+        ColorRGBA panelBg = new ColorRGBA(0.006f, 0.012f, 0.022f, 1f);
+        gameplayHudGui.attachChild(guiQuad(prefix + "_hex_bg", fx, fy, frame, frame,
+                colorMaterial(new ColorRGBA(accent.r * 0.60f, accent.g * 0.60f, accent.b * 0.65f, 1f)), 0.82f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_hex_tl", fx, fy + frame - cut, cut, cut,
+                colorMaterial(panelBg), 0.83f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_hex_tr", fx + frame - cut, fy + frame - cut, cut, cut,
+                colorMaterial(panelBg), 0.83f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_hex_bl", fx, fy, cut, cut,
+                colorMaterial(panelBg), 0.83f));
+        gameplayHudGui.attachChild(guiQuad(prefix + "_hex_br", fx + frame - cut, fy, cut, cut,
+                colorMaterial(panelBg), 0.83f));
         drawIconSlot(prefix, x, y, size, accent, initial, portraitPathForMonster(monster));
     }
 
@@ -1966,11 +2019,11 @@ public class FactoryShellApp extends SimpleApplication {
     }
 
     private Vector3f wideCameraEye() {
-        return new Vector3f(0f, 8.55f, 14.00f);
+        return new Vector3f(0f, 14.25f, 9.75f);
     }
 
     private Vector3f wideCameraTarget() {
-        return new Vector3f(0f, 2.10f, -2.60f);
+        return new Vector3f(0f, 0.55f, -0.35f);
     }
 
     private void setCameraShot(CameraMode mode, Vector3f eye, Vector3f target,

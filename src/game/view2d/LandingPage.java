@@ -22,6 +22,8 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.media.Media;
+import javafx.scene.media.MediaPlayer;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
@@ -31,11 +33,15 @@ import javafx.stage.Stage;
 import javafx.util.Duration;
 
 import java.io.InputStream;
+import java.net.URL;
 import java.util.Locale;
 
 public class LandingPage extends Application {
 
     private static volatile String selectedRole = null;
+    private static volatile String selectedMode = null;
+    private MediaPlayer landingMusic;
+    private String pendingRole = null;
 
     private static final int W = 1600;
     private static final int H = 900;
@@ -47,26 +53,23 @@ public class LandingPage extends Application {
     private static final long DOOR_FRAME_NS = 63_000_000L;
 
     private static final SpriteButtonSpec MONSTERS_BUTTON = new SpriteButtonSpec(
-            "2d/buttons/monsters.png", 6, 634, 332, 36, 52_000_000L,
-            280, 147, 0, 0, 634, 332, Color.web("#C8FFD8"), 0, 0);
+            "2d/buttons/monsters.png", 6, 484, 640, 36, 65_000_000L,
+            300, 374, 0, 0, 483, 603, Color.web("#C8FFD8"), 0, 0);
     private static final SpriteButtonSpec CARDS_BUTTON = new SpriteButtonSpec(
-            "2d/buttons/cards.png", 6, 488, 306, 36, 47_000_000L,
-            280, 150, 0, 0, 488, 306, Color.web("#F1D9FF"), 22, 28);
+            "2d/buttons/cards.png", 6, 470, 520, 36, 47_000_000L,
+            300, 327, 0, 0, 470, 513, Color.web("#F1D9FF"), 22, 28);
     private static final SpriteButtonSpec SCARER_BUTTON = new SpriteButtonSpec(
-            "2d/buttons/scarer.png", 6, 574, 210, 36, 53_000_000L,
-            310, 112, 0, 0, 574, 210, Color.web("#FFD1BC"), 22, 0);
+            "2d/buttons/scarer.png", 5, 604, 224, 25, 55_000_000L,
+            310, 112, 2, 1, 601, 222, Color.web("#FFD1BC"), 22, 0);
     private static final SpriteButtonSpec LAUGHER_BUTTON = new SpriteButtonSpec(
-            "2d/buttons/laugher.png", 6, 570, 574, 36, 47_000_000L,
-            310, 112, 0, 168, 570, 230, Color.web("#E9FFC1"), 22, 0);
-    private static final SpriteButtonSpec LAUNCH_BUTTON = new SpriteButtonSpec(
-            "2d/buttons/launch.png", 6, 640, 480, 36, 50_000_000L,
-            158, 158, 80, 0, 480, 480, Color.web("#1A1606"), 0, 0);
+            "2d/buttons/laugher.png", 5, 568, 640, 25, 57_000_000L,
+            310, 112, 2, 215, 565, 209, Color.web("#E9FFC1"), 22, 0);
     private static final SpriteButtonSpec MIKE_SPRITE = new SpriteButtonSpec(
             "2d/buttons/monsters-mike.png", 6, 640, 514, 36, 57_000_000L,
             300, 241, 0, 0, 640, 514, Color.WHITE, 0, 0);
     private static final SpriteButtonSpec HEADER_MONITOR = new SpriteButtonSpec(
             "2d/header-monitor.png", 6, 432, 594, 36, 49_000_000L,
-            280, 385, 0, 0, 432, 594, Color.WHITE, 0, 0);
+            210, 289, 0, 0, 432, 594, Color.WHITE, 0, 0);
 
     private static final String[] MONSTER_ASSETS = {
             "2d/monsters/CHR-P01.png",
@@ -105,13 +108,19 @@ public class LandingPage extends Application {
         return selectedRole;
     }
 
+    public static String getSelectedMode() {
+        return selectedMode;
+    }
+
     @Override
     public void start(Stage stage) {
         Platform.setImplicitExit(false);
+        selectedRole = null;
+        selectedMode = null;
+        pendingRole = null;
 
         Image bg = loadImage("2d/background.png");
         Image doorSheet = loadImage("2d/door-spritesheet.png");
-        Image logo = loadImage("2d/logo-door-dash.png");
 
         Pane root = new Pane();
         root.setPrefSize(W, H);
@@ -161,55 +170,31 @@ public class LandingPage extends Application {
             }
         };
         timer.start();
-
-        ImageView logoView = new ImageView();
-        if (logo != null) {
-            logoView.setImage(logo);
-        }
-        logoView.setFitWidth(360);
-        logoView.setPreserveRatio(true);
-        logoView.setLayoutX(42);
-        logoView.setLayoutY(32);
-        logoView.setEffect(glow(Color.web("#4AD9FF"), 10));
+        startLandingMusic();
 
         StackPane headerMonitor = makeLoopingSprite(HEADER_MONITOR);
         headerMonitor.setLayoutX(W / 2.0 - HEADER_MONITOR.displayW / 2.0);
-        headerMonitor.setLayoutY(-130);
-
-        VBox rightMenu = new VBox(14);
-        rightMenu.setLayoutX(W - 320);
-        rightMenu.setLayoutY(330);
-        rightMenu.getChildren().addAll(
-                makeAnimatedButton(CARDS_BUTTON, false,
-                        () -> showGallery(root, "CARDS", CARD_ASSETS, CARD_LABELS, 3, 190, 250))
-        );
+        headerMonitor.setLayoutY(-90);
 
         StackPane monstersMenuButton = makeAnimatedButton(MONSTERS_BUTTON, false,
                 () -> showGallery(root, "MONSTERS", MONSTER_ASSETS, MONSTER_LABELS, 4, 168, 168));
-        monstersMenuButton.setLayoutX(38);
-        monstersMenuButton.setLayoutY(380);
+        StackPane cardsMenuButton = makeAnimatedButton(CARDS_BUTTON, false,
+                () -> showGallery(root, "CARDS", CARD_ASSETS, CARD_LABELS, 3, 190, 250));
+        monstersMenuButton.setLayoutX(42);
+        monstersMenuButton.setLayoutY(332);
+        cardsMenuButton.setLayoutX(W - CARDS_BUTTON.displayW - 42);
+        cardsMenuButton.setLayoutY(360);
 
         StackPane mikeCharacter = makeHoverSprite(MIKE_SPRITE,
                 () -> showGallery(root, "MONSTERS", MONSTER_ASSETS, MONSTER_LABELS, 4, 168, 168));
         mikeCharacter.setLayoutX(W / 2.0 - MIKE_SPRITE.displayW / 2.0 - 8);
         mikeCharacter.setLayoutY(540);
 
-        String[] pendingRole = {null};
-        StackPane launchButton = makeAnimatedButton(LAUNCH_BUTTON, false, () -> {
-            if (pendingRole[0] != null) {
-                chooseRole(pendingRole[0]);
-            }
-        });
-        launchButton.setLayoutX(W / 2.0 - LAUNCH_BUTTON.displayW / 2.0);
-        launchButton.setLayoutY(612);
-        launchButton.setVisible(false);
-
         HBox roleButtons = new HBox(24);
         roleButtons.setAlignment(Pos.CENTER);
-        StackPane scarerButton = makeAnimatedButton(SCARER_BUTTON, true, () ->
-                selectPendingRole("scarer", pendingRole, launchButton, roleButtons));
-        StackPane laugherButton = makeAnimatedButton(LAUGHER_BUTTON, true, () ->
-                selectPendingRole("laugher", pendingRole, launchButton, roleButtons));
+        StackPane scarerButton = makeAnimatedButton(SCARER_BUTTON, true, () -> chooseRole(root, "scarer"));
+        StackPane laugherButton = makeAnimatedButton(LAUGHER_BUTTON, true, () -> chooseRole(root, "laugher"));
+        laugherButton.setRotate(180);
         roleButtons.getChildren().addAll(
                 scarerButton,
                 laugherButton
@@ -220,17 +205,18 @@ public class LandingPage extends Application {
         roleBox.setLayoutX(W / 2.0 - 322);
         roleBox.setLayoutY(H - 125);
 
-        root.getChildren().addAll(logoView, headerMonitor, rightMenu,
-                monstersMenuButton, mikeCharacter, launchButton, roleBox);
+        root.getChildren().addAll(headerMonitor, monstersMenuButton, cardsMenuButton, mikeCharacter, roleBox);
 
         Scene scene = new Scene(viewport, W, H);
         scene.setOnKeyPressed(e -> {
             if (e.getCode() == KeyCode.S) {
-                selectPendingRole("scarer", pendingRole, launchButton, roleButtons);
+                chooseRole(root, "scarer");
             } else if (e.getCode() == KeyCode.L) {
-                selectPendingRole("laugher", pendingRole, launchButton, roleButtons);
-            } else if ((e.getCode() == KeyCode.ENTER || e.getCode() == KeyCode.SPACE) && pendingRole[0] != null) {
-                chooseRole(pendingRole[0]);
+                chooseRole(root, "laugher");
+            } else if (e.getCode() == KeyCode.DIGIT2 || e.getCode() == KeyCode.NUMPAD2) {
+                chooseMode("2d");
+            } else if (e.getCode() == KeyCode.DIGIT3 || e.getCode() == KeyCode.NUMPAD3) {
+                chooseMode("3d");
             } else if (e.getCode() == KeyCode.ESCAPE) {
                 closeTopOverlay(root);
             }
@@ -242,7 +228,9 @@ public class LandingPage extends Application {
         stage.setMinWidth(960);
         stage.setMinHeight(540);
         stage.setOnCloseRequest(e -> {
+            disposeLandingMusic();
             selectedRole = null;
+            selectedMode = null;
             Platform.exit();
         });
         stage.setAlwaysOnTop(true);
@@ -253,6 +241,11 @@ public class LandingPage extends Application {
         viewport.widthProperty().addListener((obs, oldValue, newValue) -> fitDesignToViewport(viewport, designGroup));
         viewport.heightProperty().addListener((obs, oldValue, newValue) -> fitDesignToViewport(viewport, designGroup));
         fitDesignToViewport(viewport, designGroup);
+    }
+
+    @Override
+    public void stop() {
+        disposeLandingMusic();
     }
 
     private StackPane makeAnimatedButton(SpriteButtonSpec spec, boolean autoLoop, Runnable onClick) {
@@ -403,23 +396,6 @@ public class LandingPage extends Application {
         return pane;
     }
 
-    private void selectPendingRole(String role, String[] pendingRole, StackPane launchButton, HBox roleButtons) {
-        pendingRole[0] = role;
-        launchButton.setVisible(true);
-        for (int i = 0; i < roleButtons.getChildren().size(); i++) {
-            StackPane button = (StackPane) roleButtons.getChildren().get(i);
-            boolean selected = (i == 0 && role.equals("scarer")) || (i == 1 && role.equals("laugher"));
-            Color accent = i == 0 ? Color.web("#FF905C") : Color.web("#D7FF67");
-            button.setStyle(selected
-                    ? "-fx-background-color: rgba(255,255,255,0.06);"
-                    + "-fx-border-color: " + toRgba(accent, 0.95) + ";"
-                    + "-fx-border-width: 3;"
-                    + "-fx-border-radius: 14;"
-                    : "");
-            button.setEffect(selected ? glow(accent, 20) : null);
-        }
-    }
-
     private void fitDesignToViewport(Pane viewport, Group designGroup) {
         double scale = Math.min(viewport.getWidth() / W, viewport.getHeight() / H);
         if (!Double.isFinite(scale) || scale <= 0) {
@@ -454,9 +430,72 @@ public class LandingPage extends Application {
         pane.setMaxSize(w, h);
     }
 
-    private void chooseRole(String role) {
-        selectedRole = role;
+    private void chooseRole(Pane root, String role) {
+        pendingRole = role;
+        showModeSelection(root);
+    }
+
+    private void chooseMode(String mode) {
+        if (pendingRole == null) {
+            return;
+        }
+        disposeLandingMusic();
+        selectedRole = pendingRole;
+        selectedMode = mode;
         Platform.exit();
+    }
+
+    private void showModeSelection(Pane root) {
+        closeTopOverlay(root);
+
+        StackPane overlay = new StackPane();
+        overlay.setId("mode-overlay");
+        overlay.setPrefSize(W, H);
+        overlay.setStyle("-fx-background-color: rgba(2, 5, 14, 0.78);");
+
+        VBox panel = new VBox(26);
+        panel.setAlignment(Pos.CENTER);
+        panel.setPadding(new Insets(34, 42, 38, 42));
+        panel.setMaxSize(760, 430);
+        panel.setStyle("-fx-background-color: rgba(9, 17, 34, 0.96);"
+                + "-fx-border-color: #5cf5ff; -fx-border-width: 2;"
+                + "-fx-effect: dropshadow(gaussian, rgba(92,245,255,0.52), 22, 0.32, 0, 0);");
+
+        Text heading = styledText("Choose Board Mode", 34, Color.web("#F8FBFF"), FontWeight.BOLD);
+        heading.setEffect(glow(Color.web("#5CF5FF"), 12));
+        Text subheading = styledText("Press 2 for 2D or 3 for 3D", 18, Color.web("#C8D8EF"), FontWeight.BOLD);
+
+        HBox choices = new HBox(22);
+        choices.setAlignment(Pos.CENTER);
+        choices.getChildren().addAll(
+                modeChoice("2D BOARD", "Factory room board", Color.web("#67E8F9"), () -> chooseMode("2d")),
+                modeChoice("3D FACTORY", "Original 3D view", Color.web("#FFB56E"), () -> chooseMode("3d"))
+        );
+
+        StackPane back = makeSmallButton("BACK", Color.web("#DCEBFF"), () -> {
+            pendingRole = null;
+            root.getChildren().remove(overlay);
+        });
+
+        panel.getChildren().addAll(heading, subheading, choices, back);
+        overlay.getChildren().add(panel);
+        root.getChildren().add(overlay);
+    }
+
+    private VBox modeChoice(String title, String detail, Color accent, Runnable onClick) {
+        Text titleText = styledText(title, 25, accent, FontWeight.BOLD);
+        Text detailText = styledText(detail, 16, Color.web("#DCEBFF"), FontWeight.BOLD);
+        VBox choice = new VBox(12, titleText, detailText);
+        choice.setAlignment(Pos.CENTER);
+        choice.setPadding(new Insets(20));
+        choice.setPrefSize(260, 138);
+        choice.setMaxSize(260, 138);
+        choice.setCursor(Cursor.HAND);
+        choice.setStyle("-fx-background-color: rgba(18, 30, 54, 0.92);"
+                + "-fx-border-color: " + toRgb(accent) + "; -fx-border-width: 2;");
+        addHoverScale(choice, 1.04);
+        choice.setOnMouseClicked(e -> onClick.run());
+        return choice;
     }
 
     private void showGallery(Pane root, String title, String[] imagePaths, String[] labels,
@@ -539,13 +578,35 @@ public class LandingPage extends Application {
     }
 
     private void closeTopOverlay(Pane root) {
-        if (!root.getChildren().isEmpty()
-                && "gallery-overlay".equals(root.getChildren().get(root.getChildren().size() - 1).getId())) {
+        if (root.getChildren().isEmpty()) {
+            return;
+        }
+        String topId = root.getChildren().get(root.getChildren().size() - 1).getId();
+        if ("gallery-overlay".equals(topId) || "mode-overlay".equals(topId)) {
+            if ("mode-overlay".equals(topId)) {
+                pendingRole = null;
+            }
             root.getChildren().remove(root.getChildren().size() - 1);
         }
     }
 
     private void addHoverScale(StackPane pane, double scale) {
+        ScaleTransition hover = new ScaleTransition(Duration.millis(120), pane);
+        pane.setOnMouseEntered(e -> {
+            hover.stop();
+            hover.setToX(scale);
+            hover.setToY(scale);
+            hover.play();
+        });
+        pane.setOnMouseExited(e -> {
+            hover.stop();
+            hover.setToX(1.0);
+            hover.setToY(1.0);
+            hover.play();
+        });
+    }
+
+    private void addHoverScale(VBox pane, double scale) {
         ScaleTransition hover = new ScaleTransition(Duration.millis(120), pane);
         pane.setOnMouseEntered(e -> {
             hover.stop();
@@ -579,6 +640,34 @@ public class LandingPage extends Application {
         } catch (Exception ignored) {
         }
         return null;
+    }
+
+    private void startLandingMusic() {
+        URL musicUrl = getClass().getClassLoader().getResource("2d/audio/landing-theme.mp3");
+        if (musicUrl == null) {
+            return;
+        }
+        try {
+            landingMusic = new MediaPlayer(new Media(musicUrl.toExternalForm()));
+            landingMusic.setCycleCount(MediaPlayer.INDEFINITE);
+            landingMusic.setVolume(0.18);
+            landingMusic.play();
+        } catch (Exception ignored) {
+            landingMusic = null;
+        }
+    }
+
+    private void disposeLandingMusic() {
+        if (landingMusic == null) {
+            return;
+        }
+        try {
+            landingMusic.stop();
+            landingMusic.dispose();
+        } catch (Exception ignored) {
+        } finally {
+            landingMusic = null;
+        }
     }
 
     private Text styledText(String content, double size, Color color, FontWeight weight) {

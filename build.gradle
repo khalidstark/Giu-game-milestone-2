@@ -44,6 +44,7 @@ dependencies {
     implementation "org.openjfx:javafx-base:${jfxVersion}:${jfxClassifier}"
     implementation "org.openjfx:javafx-graphics:${jfxVersion}:${jfxClassifier}"
     implementation "org.openjfx:javafx-controls:${jfxVersion}:${jfxClassifier}"
+    implementation "org.openjfx:javafx-media:${jfxVersion}:${jfxClassifier}"
 
     testImplementation 'junit:junit:4.13.2'
 }

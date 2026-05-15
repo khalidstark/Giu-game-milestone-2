@@ -7,6 +7,7 @@ import java.util.Collections;
 import game.engine.dataloader.DataLoader;
 import game.engine.exceptions.InvalidMoveException;
 import game.engine.exceptions.OutOfEnergyException;
+import game.engine.cards.Card;
 import game.engine.monsters.*;
 
 public class Game {
@@ -15,6 +16,9 @@ public class Game {
 	private Monster player;
 	private Monster opponent;
 	private Monster current;
+	private int lastRoll;
+	private int lastTriggeredCellIndex = -1;
+	private Card lastDrawnCard;
 	
 	 public Game(Role playerRole) throws IOException {
 	        this.board = new Board(DataLoader.readCards());
@@ -51,6 +55,18 @@ public class Game {
 	
 	public Monster getCurrent() {
 		return current;
+	}
+
+	public int getLastRoll() {
+		return lastRoll;
+	}
+
+	public int getLastTriggeredCellIndex() {
+		return lastTriggeredCellIndex;
+	}
+
+	public Card getLastDrawnCard() {
+		return lastDrawnCard;
 	}
 	
 	public void setCurrent(Monster current) {
@@ -90,12 +106,20 @@ public class Game {
 
 	    public void playTurn() throws InvalidMoveException {
 	        if (current.isFrozen()) {
+	            lastRoll = 0;
+	            lastTriggeredCellIndex = -1;
+	            lastDrawnCard = null;
 	            current.setFrozen(false);
 	            switchTurn();
 	            return;
 	        }
-	        int roll = rollDice();
-	        board.moveMonster(current, roll, getCurrentOpponent());
+	        lastRoll = rollDice();
+	        lastTriggeredCellIndex = -1;
+	        lastDrawnCard = null;
+	        Board.clearLastDrawnCard();
+	        board.moveMonster(current, lastRoll, getCurrentOpponent());
+	        lastTriggeredCellIndex = board.getLastTriggeredCellIndex();
+	        lastDrawnCard = Board.getLastDrawnCard();
 	        switchTurn();
 	    }
 

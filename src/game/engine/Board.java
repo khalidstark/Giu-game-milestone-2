@@ -22,6 +22,8 @@ public class Board {
 	private static ArrayList<Card> OriginalCardsCopy;
 	private static ArrayList<Card> originalCards;
 	public static ArrayList<Card> cards;
+	private static Card lastDrawnCard;
+	private int lastTriggeredCellIndex = -1;
 	
 	public Board(ArrayList<Card> readCards) {
 		this.boardCells = new Cell[Constants.BOARD_ROWS][Constants.BOARD_COLS];
@@ -29,6 +31,7 @@ public class Board {
 		originalCards = readCards;
 		OriginalCardsCopy = originalCards;
 		cards = new ArrayList<Card>();
+		lastDrawnCard = null;
 		setCardsByRarity();
 		reloadCards();
 	}
@@ -55,6 +58,18 @@ public class Board {
 	
 	public static void setCards(ArrayList<Card> cards) {
 		Board.cards = cards;
+	}
+
+	public int getLastTriggeredCellIndex() {
+		return lastTriggeredCellIndex;
+	}
+
+	public static Card getLastDrawnCard() {
+		return lastDrawnCard;
+	}
+
+	public static void clearLastDrawnCard() {
+		lastDrawnCard = null;
 	}
 	
 	private int[] indexToRowCol(int index){
@@ -144,18 +159,20 @@ public class Board {
 		if (cards.isEmpty()) {
 			reloadCards();
 		}
-		return cards.remove(0);
+		lastDrawnCard = cards.remove(0);
+		return lastDrawnCard;
 	}
 
 	public void moveMonster(Monster currentMonster, int roll, Monster opponentMonster) throws InvalidMoveException {
-	      int destination = (currentMonster.getPosition() + roll) % Constants.BOARD_SIZE;
+	      int destination = effectiveMoveDestination(currentMonster, roll);
 
-	      if (destination == opponentMonster.getPosition())
+	      if (destination == normalizeIndex(opponentMonster.getPosition()))
 	          throw new InvalidMoveException();
 
 	      currentMonster.move(roll);
+	      lastTriggeredCellIndex = normalizeIndex(currentMonster.getPosition());
 
-	      Cell landedCell = getCell(currentMonster.getPosition());
+	      Cell landedCell = getCell(lastTriggeredCellIndex);
 	      landedCell.onLand(currentMonster, opponentMonster);
 
 	      if (currentMonster.isConfused()) {
@@ -165,6 +182,23 @@ public class Board {
 
 	      updateMonsterPositions(currentMonster, opponentMonster);
 	  }
+
+	private int effectiveMoveDestination(Monster monster, int roll) {
+		int distance = roll;
+		if (monster instanceof Dasher) {
+			Dasher dasher = (Dasher) monster;
+			distance = roll * (dasher.getMomentumTurns() > 0 ? 3 : 2);
+		} else if (monster instanceof MultiTasker) {
+			MultiTasker multiTasker = (MultiTasker) monster;
+			distance = multiTasker.getNormalSpeedTurns() > 0 ? roll : roll / 2;
+		}
+		return normalizeIndex(monster.getPosition() + distance);
+	}
+
+	private int normalizeIndex(int index) {
+		int normalized = index % Constants.BOARD_SIZE;
+		return normalized < 0 ? normalized + Constants.BOARD_SIZE : normalized;
+	}
 	
 	private void updateMonsterPositions(Monster player, Monster opponent){
 		for(int i = 0 ;i < Constants.BOARD_SIZE; i++){

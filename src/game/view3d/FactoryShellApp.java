@@ -4,6 +4,7 @@ import game.engine.Constants;
 import game.engine.Board;
 import game.engine.Game;
 import game.engine.Role;
+import game.engine.cards.Card;
 import game.engine.cells.CardCell;
 import game.engine.cells.Cell;
 import game.engine.cells.ContaminationSock;
@@ -1430,17 +1431,18 @@ public class FactoryShellApp extends SimpleApplication {
         MonsterSnapshot opponentSnapshot = new MonsterSnapshot(game.getOpponent());
         int playerBefore = game.getPlayer().getPosition();
         int opponentBefore = game.getOpponent().getPosition();
-        int deckBefore = Board.getCards().size();
         try {
             game.playTurn();
             refreshInfoPanels();
             syncTokenToMonster(playerToken, playerBefore);
             syncTokenToMonster(opponentToken, opponentBefore);
             lastRollText = turnStatus(movingMonster, playerBefore, opponentBefore);
-            lastVisualRoll = inferVisualDiceRoll(movingPlayer ? playerBefore : opponentBefore,
+            lastVisualRoll = game.getLastRoll() > 0
+                    ? game.getLastRoll()
+                    : inferVisualDiceRoll(movingPlayer ? playerBefore : opponentBefore,
                     movingMonster.getPosition());
             startDiceRoll(false);
-            addTurnHudEvents(movingMonster, movingPlayer, playerSnapshot, opponentSnapshot, deckBefore);
+            addTurnHudEvents(movingMonster, movingPlayer, playerSnapshot, opponentSnapshot);
             startTurnCamera(movingPlayer ? playerToken : opponentToken);
             System.out.printf("[Turn] %s: player %d->%d, opponent %d->%d%n",
                     movingMonster.getName(),
@@ -1489,8 +1491,7 @@ public class FactoryShellApp extends SimpleApplication {
     }
 
     private void addTurnHudEvents(Monster movingMonster, boolean movingPlayer,
-                                  MonsterSnapshot playerBefore, MonsterSnapshot opponentBefore,
-                                  int deckBefore) {
+                                  MonsterSnapshot playerBefore, MonsterSnapshot opponentBefore) {
         MonsterSnapshot playerAfter = new MonsterSnapshot(game.getPlayer());
         MonsterSnapshot opponentAfter = new MonsterSnapshot(game.getOpponent());
         MonsterSnapshot movingBefore = movingPlayer ? playerBefore : opponentBefore;
@@ -1498,7 +1499,7 @@ public class FactoryShellApp extends SimpleApplication {
         MonsterSnapshot otherBefore = movingPlayer ? opponentBefore : playerBefore;
         MonsterSnapshot otherAfter = movingPlayer ? opponentAfter : playerAfter;
         String actor = movingPlayer ? "You" : "Opponent";
-        int deckAfter = Board.getCards().size();
+        int triggeredCell = game.getLastTriggeredCellIndex();
 
         addHudEvent("TURN RESULT", actor + " " + positionText(movingBefore.position, movingAfter.position),
                 movingPlayer ? new ColorRGBA(0.08f, 0.88f, 0.78f, 1f) : new ColorRGBA(1f, 0.63f, 0.42f, 1f));
@@ -1513,12 +1514,13 @@ public class FactoryShellApp extends SimpleApplication {
                     new ColorRGBA(0.72f, 0.34f, 1f, 1f));
         }
 
-        addTransportEvent(actor, movingBefore, movingAfter);
-        addCellEffectEvent(actor, movingBefore, movingAfter);
+        addTransportEvent(actor, movingBefore, movingAfter, triggeredCell);
+        addCellEffectEvent(actor, movingBefore, movingAfter, triggeredCell);
 
-        if (deckAfter != deckBefore) {
-            lastCardHighlight = inferCardHighlight(playerBefore, opponentBefore, playerAfter, opponentAfter);
-            addHudEvent("CARD DRAWN", actor + " drew " + friendlyCardName(lastCardHighlight),
+        Card drawnCard = game.getLastDrawnCard();
+        if (drawnCard != null) {
+            lastCardHighlight = cardHighlightKey(drawnCard);
+            addHudEvent("CARD DRAWN", actor + " drew " + drawnCard.getName(),
                     new ColorRGBA(0.72f, 0.34f, 1f, 1f));
         }
     }
@@ -1533,8 +1535,8 @@ public class FactoryShellApp extends SimpleApplication {
         return "moved " + before + " -> " + after;
     }
 
-    private void addTransportEvent(String actor, MonsterSnapshot before, MonsterSnapshot after) {
-        int triggerIndex = findTransportTriggerIndex(before.position, after.position);
+    private void addTransportEvent(String actor, MonsterSnapshot before, MonsterSnapshot after, int triggeredCell) {
+        int triggerIndex = triggeredCell >= 0 ? triggeredCell : findTransportTriggerIndex(before.position, after.position);
         if (triggerIndex < 0) {
             return;
         }
@@ -1553,25 +1555,67 @@ public class FactoryShellApp extends SimpleApplication {
         }
     }
 
-    private void addCellEffectEvent(String actor, MonsterSnapshot before, MonsterSnapshot after) {
-        Cell cell = engineCellAt(after.position);
+    private void addCellEffectEvent(String actor, MonsterSnapshot before, MonsterSnapshot after, int triggeredCell) {
+        if (triggeredCell < 0) {
+            return;
+        }
+        Cell cell = engineCellAt(triggeredCell);
         if (cell instanceof DoorCell) {
             DoorCell door = (DoorCell) cell;
             int energyDelta = after.energy - before.energy;
             if (energyDelta != 0) {
-                String sign = energyDelta > 0 ? "+" : "";
-                addHudEvent(door.getRole() + " DOOR", actor + " " + sign + energyDelta + " energy",
+                addHudEvent(door.getRole() + " DOOR",
+                        actor + " " + energyWord(energyDelta) + " " + Math.abs(energyDelta)
+                                + " energy on " + door.getName() + " (" + door.getEnergy() + ")",
                         energyDelta > 0 ? new ColorRGBA(0.20f, 0.86f, 1f, 1f)
                                 : new ColorRGBA(1f, 0.38f, 0.30f, 1f));
             }
         } else if (cell instanceof MonsterCell) {
+            Monster cellMonster = ((MonsterCell) cell).getCellMonster();
+            String stationed = cellMonster == null ? cell.getName() : shortMonsterName(cellMonster.getName());
             int energyDelta = after.energy - before.energy;
-            String detail = actor + " landed on " + cell.getName();
-            if (energyDelta != 0) {
-                detail += " | " + (energyDelta > 0 ? "+" : "") + energyDelta + " energy";
+            String detail;
+            if (cellMonster != null && cellMonster.getRole() == before.role) {
+                detail = actor + " matched " + stationed + " and activated power";
+            } else if (energyDelta != 0) {
+                detail = actor + " " + energyWord(energyDelta) + " " + Math.abs(energyDelta) + " energy vs " + stationed;
+            } else {
+                detail = actor + " faced " + stationed + " with no energy change";
             }
             addHudEvent("MONSTER CELL", detail, new ColorRGBA(0.26f, 1f, 0.78f, 1f));
         }
+    }
+
+    private String energyWord(int delta) {
+        return delta > 0 ? "gained" : "lost";
+    }
+
+    private String shortMonsterName(String name) {
+        if (name.contains("Sullivan")) {
+            return "Sulley";
+        }
+        int space = name.indexOf(' ');
+        return space > 0 ? name.substring(0, space) : name;
+    }
+
+    private String cardHighlightKey(Card card) {
+        String type = card.getClass().getSimpleName();
+        if ("EnergyStealCard".equals(type)) {
+            return "ENERGY STEAL";
+        }
+        if ("ShieldCard".equals(type)) {
+            return "SHIELD";
+        }
+        if ("SwapperCard".equals(type)) {
+            return "SWAPPER";
+        }
+        if ("StartOverCard".equals(type)) {
+            return "START OVER";
+        }
+        if ("ConfusionCard".equals(type)) {
+            return "CONFUSION";
+        }
+        return "CARD";
     }
 
     private String inferCardHighlight(MonsterSnapshot playerBefore, MonsterSnapshot opponentBefore,

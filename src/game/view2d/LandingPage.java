@@ -41,6 +41,7 @@ public class LandingPage extends Application {
     private static volatile String selectedRole = null;
     private static volatile String selectedMode = null;
     private MediaPlayer landingMusic;
+    private OnboardingCutscene onboardingCutscene;
     private String pendingRole = null;
 
     private static final int W = 1600;
@@ -170,7 +171,6 @@ public class LandingPage extends Application {
             }
         };
         timer.start();
-        startLandingMusic();
 
         StackPane headerMonitor = makeLoopingSprite(HEADER_MONITOR);
         headerMonitor.setLayoutX(W / 2.0 - HEADER_MONITOR.displayW / 2.0);
@@ -206,6 +206,7 @@ public class LandingPage extends Application {
         roleBox.setLayoutY(H - 125);
 
         root.getChildren().addAll(headerMonitor, monstersMenuButton, cardsMenuButton, mikeCharacter, roleBox);
+        showOnboardingOrStartMusic(root);
 
         Scene scene = new Scene(viewport, W, H);
         scene.setOnKeyPressed(e -> {
@@ -228,6 +229,7 @@ public class LandingPage extends Application {
         stage.setMinWidth(960);
         stage.setMinHeight(540);
         stage.setOnCloseRequest(e -> {
+            disposeOnboarding();
             disposeLandingMusic();
             selectedRole = null;
             selectedMode = null;
@@ -245,6 +247,7 @@ public class LandingPage extends Application {
 
     @Override
     public void stop() {
+        disposeOnboarding();
         disposeLandingMusic();
     }
 
@@ -642,6 +645,23 @@ public class LandingPage extends Application {
         return null;
     }
 
+    private void showOnboardingOrStartMusic(Pane root) {
+        onboardingCutscene = new OnboardingCutscene(getClass().getClassLoader(), W, H);
+        Pane overlay = onboardingCutscene.getView();
+        overlay.setId("onboarding-overlay");
+        onboardingCutscene.setOnFinished(() -> {
+            root.getChildren().remove(overlay);
+            disposeOnboarding();
+            startLandingMusic();
+        });
+        root.getChildren().add(overlay);
+        Platform.runLater(() -> {
+            if (onboardingCutscene != null) {
+                onboardingCutscene.play();
+            }
+        });
+    }
+
     private void startLandingMusic() {
         URL musicUrl = getClass().getClassLoader().getResource("2d/audio/landing-theme.mp3");
         if (musicUrl == null) {
@@ -668,6 +688,14 @@ public class LandingPage extends Application {
         } finally {
             landingMusic = null;
         }
+    }
+
+    private void disposeOnboarding() {
+        if (onboardingCutscene == null) {
+            return;
+        }
+        onboardingCutscene.dispose();
+        onboardingCutscene = null;
     }
 
     private Text styledText(String content, double size, Color color, FontWeight weight) {

@@ -27,12 +27,14 @@ final class InstructionPages {
     private final StackPane backButton;
     private final Text nextText;
     private final Image[] cards = new Image[CARD_COUNT];
+    private final Runnable buttonSound;
 
     private Runnable onFinished = () -> {};
     private int currentIndex;
 
-    InstructionPages(ClassLoader loader, double width, double height) {
+    InstructionPages(ClassLoader loader, double width, double height, Runnable buttonSound) {
         this.loader = loader;
+        this.buttonSound = buttonSound == null ? () -> {} : buttonSound;
         this.view = new Pane();
         this.view.setPrefSize(width, height);
         this.view.setMinSize(width, height);
@@ -74,7 +76,7 @@ final class InstructionPages {
     }
 
     static boolean shouldPlay() {
-        return !preferences().getBoolean(PREF_KEY, false);
+        return true;
     }
 
     static void markSeen() {
@@ -112,10 +114,12 @@ final class InstructionPages {
         if (currentIndex <= 0) {
             return;
         }
+        buttonSound.run();
         showCard(currentIndex - 1);
     }
 
     private void next() {
+        buttonSound.run();
         if (currentIndex >= CARD_COUNT - 1) {
             markSeen();
             onFinished.run();

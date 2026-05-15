@@ -36,6 +36,7 @@ import javafx.stage.Stage;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -81,8 +82,13 @@ public class Board2DApp extends Application {
     private boolean gameOver;
     private ActiveCellEffect activeEffect;
     private TurnResolution pendingResolution;
+    private IntroSequence introSequence;
+    private SoundManager2D sounds;
     private String latestCardTitle = "No card drawn";
     private String latestCardDetail = "Land on a card cell";
+
+    private static final double INTRO_FALLBACK_SECONDS = 2.8;
+    private static final double INTRO_POST_AUDIO_SECONDS = 0.45;
 
     public static void main(String[] args) {
         launch(args);
@@ -92,6 +98,8 @@ public class Board2DApp extends Application {
     public void start(Stage stage) {
         selectedRole = parseRole(getParameters().getRaw().toArray(new String[0]));
         loadImages();
+        sounds = new SoundManager2D(getClass().getClassLoader(), 0.10);
+        sounds.startTheme();
 
         StackPane root = new StackPane();
         canvas = new Canvas(DEFAULT_W, DEFAULT_H);
@@ -115,6 +123,9 @@ public class Board2DApp extends Application {
 
         Scene scene = new Scene(root, DEFAULT_W, DEFAULT_H, Color.web("#07101A"));
         scene.setOnKeyPressed(e -> {
+            if (isIntroPlaying()) {
+                return;
+            }
             if (e.getCode() == KeyCode.SPACE) {
                 playTurn();
             } else if (e.getCode() == KeyCode.P) {
@@ -144,6 +155,15 @@ public class Board2DApp extends Application {
         stage.show();
         stage.toFront();
         root.requestFocus();
+        Platform.runLater(() -> {
+            root.requestFocus();
+            startIntroSequence();
+        });
+    }
+
+    @Override
+    public void stop() {
+        disposeSounds();
     }
 
     private Role parseRole(String[] args) {
@@ -251,19 +271,22 @@ public class Board2DApp extends Application {
     }
 
     private String monsterImagePath(Monster monster) {
+        return String.format(Locale.ROOT, "2d/monsters/CHR-P%02d.png", monsterAssetNumber(monster));
+    }
+
+    private int monsterAssetNumber(Monster monster) {
         String name = monster.getName().toLowerCase(Locale.ROOT);
-        if (name.contains("mike")) return "2d/monsters/CHR-P01.png";
-        if (name.contains("sullivan") || name.contains("sulley")) return "2d/monsters/CHR-P02.png";
-        if (name.contains("randall")) return "2d/monsters/CHR-P03.png";
-        if (name.contains("celia")) return "2d/monsters/CHR-P04.png";
-        if (name.contains("fungus")) return "2d/monsters/CHR-P05.png";
-        if (name.contains("yeti")) return "2d/monsters/CHR-P06.png";
-        int slot = Math.abs(monster.getName().hashCode()) % 8 + 1;
-        return String.format(Locale.ROOT, "2d/monsters/CHR-P%02d.png", slot);
+        if (name.contains("mike")) return 1;
+        if (name.contains("sullivan") || name.contains("sulley")) return 2;
+        if (name.contains("randall")) return 3;
+        if (name.contains("celia")) return 4;
+        if (name.contains("fungus")) return 5;
+        if (name.contains("yeti")) return 6;
+        return Math.abs(monster.getName().hashCode()) % 8 + 1;
     }
 
     private void playTurn() {
-        if (game == null || gameOver || isTurnAnimating()) {
+        if (game == null || gameOver || isIntroPlaying() || isTurnAnimating()) {
             return;
         }
 
@@ -315,13 +338,14 @@ public class Board2DApp extends Application {
     }
 
     private void usePowerup() {
-        if (game == null || gameOver || isTurnAnimating()) {
+        if (game == null || gameOver || isIntroPlaying() || isTurnAnimating()) {
             return;
         }
 
         Monster current = game.getCurrent();
         try {
             game.usePowerup();
+            playBoardSfx(SoundManager2D.POWERUP);
             eventLine = current.getName() + " used a powerup";
             status = "Turn: " + game.getCurrent().getName();
             addEvent(eventLine);
@@ -342,6 +366,7 @@ public class Board2DApp extends Application {
         followToken = actorToken;
         status = "Cell effect";
         eventLine = effect.label + " triggered on cell " + triggeredCell;
+        playCellSfx(triggeredCell);
         pendingResolution = new TurnResolution(playerAfter, opponentAfter, finalEventLine,
                 "Turn: " + game.getCurrent().getName(), actorToken, triggeredCell, effect);
     }
@@ -412,6 +437,9 @@ public class Board2DApp extends Application {
     }
 
     private void handleCanvasClick(double x, double y, Stage stage) {
+        if (isIntroPlaying()) {
+            return;
+        }
         double buttonX = SIDE_MARGIN;
         double buttonY = canvas.getHeight() - SIDE_MARGIN - 58;
         if (x >= buttonX && x <= buttonX + LEFT_PANEL_W && y >= buttonY && y <= buttonY + 48) {
@@ -443,6 +471,7 @@ public class Board2DApp extends Application {
         cmd.add("--add-opens"); cmd.add("java.desktop/sun.awt=ALL-UNNAMED");
         cmd.add("--add-opens"); cmd.add("java.desktop/sun.java2d=ALL-UNNAMED");
         cmd.add("game.view2d.LandingLauncher");
+        cmd.add("--skip-intro-flow");
         new ProcessBuilder(cmd).inheritIO().start();
     }
 
@@ -477,6 +506,141 @@ public class Board2DApp extends Application {
 
     private boolean isTurnAnimating() {
         return hasMovingToken() || activeEffect != null || pendingResolution != null;
+    }
+
+    private boolean isIntroPlaying() {
+        return introSequence != null && introSequence.active;
+    }
+
+    private void startIntroSequence() {
+        if (game == null || playerToken == null || opponentToken == null || isIntroPlaying()) {
+            return;
+        }
+        introSequence = new IntroSequence(new IntroSlide[] {
+                createIntroSlide("PLAYER 1", game.getPlayer(), playerToken.image),
+                createIntroSlide("PLAYER 2", game.getOpponent(), opponentToken.image)
+        });
+        status = "Introducing monsters";
+        eventLine = "Meet the competitors";
+        beginIntroSlide();
+    }
+
+    private IntroSlide createIntroSlide(String playerLabel, Monster monster, Image image) {
+        int number = monsterAssetNumber(monster);
+        String audioPath = introAudioPath(number);
+        double duration = audioPath == null
+                ? INTRO_FALLBACK_SECONDS
+                : introAudioDuration(number) + INTRO_POST_AUDIO_SECONDS;
+        return new IntroSlide(playerLabel, monster.getName(), monster.getRole().name(),
+                introQuote(monster), image, audioPath, duration);
+    }
+
+    private String introAudioPath(int monsterNumber) {
+        String path = String.format(Locale.ROOT, "2d/audio/monster-intros/monster-%02d.m4a", monsterNumber);
+        URL url = getClass().getClassLoader().getResource(path);
+        return url == null ? null : path;
+    }
+
+    private double introAudioDuration(int monsterNumber) {
+        switch (monsterNumber) {
+            case 1:
+                return 6.75;
+            case 2:
+                return 4.70;
+            case 3:
+                return 4.60;
+            case 4:
+                return 5.37;
+            case 5:
+                return 3.84;
+            case 7:
+                return 4.34;
+            case 8:
+                return 3.45;
+            default:
+                return INTRO_FALLBACK_SECONDS;
+        }
+    }
+
+    private String introQuote(Monster monster) {
+        String name = monster.getName().toLowerCase(Locale.ROOT);
+        if (name.contains("mike")) {
+            return "I'm on a roll!";
+        }
+        if (name.contains("sullivan") || name.contains("sulley")) {
+            return "Top scarer coming through.";
+        }
+        if (name.contains("randall")) {
+            return "You won't see me coming.";
+        }
+        if (name.contains("celia")) {
+            return "Googly Bear, stay sharp!";
+        }
+        if (name.contains("fungus")) {
+            return "Please don't panic.";
+        }
+        if (name.contains("yeti")) {
+            return "Welcome to the Himalayas!";
+        }
+        return "Ready for the scare floor.";
+    }
+
+    private void beginIntroSlide() {
+        if (!isIntroPlaying()) {
+            return;
+        }
+        introSequence.elapsed = 0;
+        IntroSlide slide = introSequence.currentSlide();
+        playBoardSfx(slide.audioPath);
+    }
+
+    private void updateIntro(double dt) {
+        if (!isIntroPlaying()) {
+            return;
+        }
+        introSequence.elapsed += dt;
+        if (introSequence.elapsed >= introSequence.currentSlide().duration) {
+            advanceIntroSlide();
+        }
+    }
+
+    private void advanceIntroSlide() {
+        if (!isIntroPlaying()) {
+            return;
+        }
+        if (introSequence.index < introSequence.slides.length - 1) {
+            introSequence.index++;
+            beginIntroSlide();
+            return;
+        }
+        introSequence.active = false;
+        introSequence = null;
+        status = "Space to roll";
+        eventLine = String.format(Locale.ROOT, "Game start: You are %s vs %s",
+                game.getPlayer().getName(), game.getOpponent().getName());
+    }
+
+    private void playBoardSfx(String resourcePath) {
+        if (resourcePath == null || sounds == null) {
+            return;
+        }
+        sounds.playSfxPausingTheme(resourcePath);
+    }
+
+    private void playCellSfx(int cellIndex) {
+        String resourcePath = soundForCell(cellIndex);
+        playBoardSfx(resourcePath);
+        if (SoundManager2D.MONSTER_CELL_SCARER.equals(resourcePath)) {
+            playBoardSfx(resourcePath);
+        }
+    }
+
+    private void disposeSounds() {
+        if (sounds == null) {
+            return;
+        }
+        sounds.dispose();
+        sounds = null;
     }
 
     private int inferVisualDiceRoll(int before, int after) {
@@ -522,6 +686,7 @@ public class Board2DApp extends Application {
     }
 
     private void update(double dt) {
+        updateIntro(dt);
         updateToken(playerToken, dt);
         updateToken(opponentToken, dt);
         updateCellEffect(dt);
@@ -596,6 +761,7 @@ public class Board2DApp extends Application {
         }
         drawInterface(gc, w, h);
         drawCellEffectOverlay(gc, w, h);
+        drawIntroOverlay(gc, w, h);
     }
 
     private void drawBackground(GraphicsContext gc, double w, double h) {
@@ -711,6 +877,28 @@ public class Board2DApp extends Application {
         return null;
     }
 
+    private String soundForCell(int index) {
+        if (index < 0 || game == null) {
+            return null;
+        }
+        Cell cell = engineCellAt(index);
+        if (cell instanceof ContaminationSock) {
+            return SoundManager2D.CELL_CONTAMINATION_SOCK;
+        }
+        if (cell instanceof DoorCell) {
+            DoorCell door = (DoorCell) cell;
+            return door.getRole() == Role.SCARER ? SoundManager2D.DOOR_SCARER : SoundManager2D.DOOR_LAUGHER;
+        }
+        if (cell instanceof MonsterCell) {
+            Monster cellMonster = ((MonsterCell) cell).getCellMonster();
+            if (cellMonster != null && cellMonster.getRole() == Role.SCARER) {
+                return SoundManager2D.MONSTER_CELL_SCARER;
+            }
+            return SoundManager2D.MONSTER_CELL_LAUGHER;
+        }
+        return null;
+    }
+
     private Color fallbackCellColor(int index) {
         Cell cell = engineCellAt(index);
         if (cell instanceof MonsterCell) return Color.web("#5F4E91");
@@ -812,6 +1000,130 @@ public class Board2DApp extends Application {
         gc.setGlobalAlpha(activeEffect.visualAlpha());
         gc.drawImage(activeEffect.effect.sheet, frame.x, frame.y, frame.w, frame.h, x, y, drawW, drawH);
         gc.setGlobalAlpha(1.0);
+    }
+
+    private void drawIntroOverlay(GraphicsContext gc, double w, double h) {
+        if (!isIntroPlaying()) {
+            return;
+        }
+
+        IntroSlide slide = introSequence.currentSlide();
+        double fadeIn = clamp(introSequence.elapsed / 0.35, 0, 1);
+        double fadeOut = clamp((slide.duration - introSequence.elapsed) / 0.35, 0, 1);
+        double alpha = Math.min(fadeIn, fadeOut);
+
+        gc.setGlobalAlpha(alpha);
+        gc.setFill(Color.rgb(0, 0, 0, 0.70));
+        gc.fillRect(0, 0, w, h);
+
+        double panelW = clamp(w * 0.66, 760, 940);
+        double panelH = clamp(h * 0.60, 500, 570);
+        double panelX = (w - panelW) * 0.5;
+        double panelY = (h - panelH) * 0.5;
+
+        gc.setFill(Color.rgb(8, 13, 29, 0.94));
+        gc.fillRoundRect(panelX, panelY, panelW, panelH, 30, 30);
+        gc.setStroke(Color.web("#FF9F10"));
+        gc.setLineWidth(3);
+        gc.strokeRoundRect(panelX, panelY, panelW, panelH, 30, 30);
+        gc.setStroke(Color.rgb(103, 232, 249, 0.25));
+        gc.setLineWidth(1.5);
+        gc.strokeRoundRect(panelX + 10, panelY + 10, panelW - 20, panelH - 20, 22, 22);
+
+        double imageBoxX = panelX + 48;
+        double imageBoxY = panelY + 100;
+        double imageBoxW = panelW * 0.38;
+        double imageBoxH = panelH - 150;
+        gc.setFill(Color.rgb(0, 0, 0, 0.32));
+        gc.fillOval(imageBoxX + imageBoxW * 0.08, imageBoxY + imageBoxH * 0.72,
+                imageBoxW * 0.84, imageBoxH * 0.18);
+        drawImageFit(gc, slide.image, imageBoxX, imageBoxY, imageBoxW, imageBoxH);
+
+        double textX = panelX + panelW * 0.48;
+        double textW = panelW * 0.44;
+        gc.setTextAlign(TextAlignment.LEFT);
+        gc.setTextBaseline(VPos.TOP);
+
+        gc.setFont(Font.font("System", FontWeight.BLACK, 24));
+        gc.setFill(Color.web("#FFB33A"));
+        gc.fillText(slide.playerLabel, textX, panelY + 76);
+
+        gc.setFont(Font.font("System", FontWeight.BLACK, 42));
+        gc.setFill(Color.web("#FFFFFF"));
+        gc.fillText(ellipsize(Font.font("System", FontWeight.BLACK, 42), slide.name, textW), textX, panelY + 118);
+
+        gc.setFont(Font.font("System", FontWeight.BOLD, 18));
+        gc.setFill(Color.rgb(103, 232, 249, 0.18));
+        gc.fillRoundRect(textX, panelY + 184, 128, 34, 17, 17);
+        gc.setStroke(Color.rgb(103, 232, 249, 0.70));
+        gc.setLineWidth(1.5);
+        gc.strokeRoundRect(textX, panelY + 184, 128, 34, 17, 17);
+        gc.setFill(Color.web("#BFFBFF"));
+        gc.fillText(slide.role, textX + 18, panelY + 190);
+
+        double quoteY = panelY + 260;
+        gc.setFill(Color.rgb(0, 0, 0, 0.38));
+        gc.fillRoundRect(textX - 20, quoteY - 24, textW + 40, 142, 18, 18);
+        gc.setStroke(Color.rgb(255, 159, 16, 0.58));
+        gc.setLineWidth(2);
+        gc.strokeRoundRect(textX - 20, quoteY - 24, textW + 40, 142, 18, 18);
+
+        Font quoteFont = Font.font("System", FontWeight.BLACK, 28);
+        gc.setFont(quoteFont);
+        gc.setFill(Color.web("#FFF1D6"));
+        List<String> quoteLines = wrapIntroText("\"" + slide.quote + "\"", quoteFont, textW, 3);
+        for (int i = 0; i < quoteLines.size(); i++) {
+            gc.fillText(quoteLines.get(i), textX, quoteY + i * 34);
+        }
+
+        gc.setFont(Font.font("System", FontWeight.BOLD, 16));
+        gc.setFill(Color.web("#BFD7FF"));
+        gc.fillText("Game starts after both monsters are introduced.", textX, panelY + panelH - 74);
+        gc.setGlobalAlpha(1.0);
+    }
+
+    private void drawImageFit(GraphicsContext gc, Image image, double x, double y, double w, double h) {
+        if (image == null) {
+            gc.setFill(Color.web("#67E8F9"));
+            gc.fillOval(x + w * 0.25, y + h * 0.20, w * 0.50, w * 0.50);
+            return;
+        }
+        double scale = Math.min(w / image.getWidth(), h / image.getHeight());
+        double drawW = image.getWidth() * scale;
+        double drawH = image.getHeight() * scale;
+        gc.drawImage(image, x + (w - drawW) * 0.5, y + (h - drawH) * 0.5, drawW, drawH);
+    }
+
+    private List<String> wrapIntroText(String text, Font font, double maxWidth, int maxLines) {
+        List<String> lines = new ArrayList<>();
+        String clean = text == null ? "" : text.trim().replaceAll("\\s+", " ");
+        if (clean.isEmpty()) {
+            lines.add("");
+            return lines;
+        }
+        String[] words = clean.split(" ");
+        StringBuilder current = new StringBuilder();
+        for (int i = 0; i < words.length; i++) {
+            String candidate = current.length() == 0 ? words[i] : current + " " + words[i];
+            if (textWidth(font, candidate) <= maxWidth) {
+                current.setLength(0);
+                current.append(candidate);
+                continue;
+            }
+            if (current.length() > 0) {
+                lines.add(current.toString());
+            }
+            current.setLength(0);
+            current.append(words[i]);
+            if (lines.size() == maxLines - 1) {
+                lines.add(ellipsize(font, appendRemaining(current.toString(), words, i + 1), maxWidth));
+                return lines;
+            }
+        }
+        if (current.length() > 0) {
+            lines.add(current.toString());
+        }
+        return lines;
     }
 
     private void drawInterface(GraphicsContext gc, double w, double h) {
@@ -1382,6 +1694,42 @@ public class Board2DApp extends Application {
             this.w = w;
             this.h = h;
             this.duration = duration;
+        }
+    }
+
+    private static final class IntroSequence {
+        final IntroSlide[] slides;
+        int index;
+        double elapsed;
+        boolean active = true;
+
+        IntroSequence(IntroSlide[] slides) {
+            this.slides = slides;
+        }
+
+        IntroSlide currentSlide() {
+            return slides[Math.max(0, Math.min(index, slides.length - 1))];
+        }
+    }
+
+    private static final class IntroSlide {
+        final String playerLabel;
+        final String name;
+        final String role;
+        final String quote;
+        final Image image;
+        final String audioPath;
+        final double duration;
+
+        IntroSlide(String playerLabel, String name, String role, String quote,
+                   Image image, String audioPath, double duration) {
+            this.playerLabel = playerLabel;
+            this.name = name;
+            this.role = role;
+            this.quote = quote;
+            this.image = image;
+            this.audioPath = audioPath;
+            this.duration = Math.max(1.2, duration);
         }
     }
 

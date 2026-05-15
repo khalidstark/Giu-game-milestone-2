@@ -22,8 +22,6 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.scene.media.Media;
-import javafx.scene.media.MediaPlayer;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
@@ -33,17 +31,19 @@ import javafx.stage.Stage;
 import javafx.util.Duration;
 
 import java.io.InputStream;
-import java.net.URL;
 import java.util.Locale;
 
 public class LandingPage extends Application {
 
     private static volatile String selectedRole = null;
     private static volatile String selectedMode = null;
-    private MediaPlayer landingMusic;
+    private static final String SKIP_INTRO_FLOW_ARG = "--skip-intro-flow";
+    private static final double BUTTON_SOUND_RATE = 1.45;
+    private SoundManager2D sounds;
     private OnboardingCutscene onboardingCutscene;
     private InstructionPages instructionPages;
     private String pendingRole = null;
+    private boolean skipIntroFlow;
 
     private static final int W = 1600;
     private static final int H = 900;
@@ -120,6 +120,7 @@ public class LandingPage extends Application {
         selectedRole = null;
         selectedMode = null;
         pendingRole = null;
+        skipIntroFlow = getParameters().getRaw().contains(SKIP_INTRO_FLOW_ARG);
 
         Image bg = loadImage("2d/background.png");
         Image doorSheet = loadImage("2d/door-spritesheet.png");
@@ -186,8 +187,10 @@ public class LandingPage extends Application {
         cardsMenuButton.setLayoutX(W - CARDS_BUTTON.displayW - 42);
         cardsMenuButton.setLayoutY(360);
 
-        StackPane mikeCharacter = makeHoverSprite(MIKE_SPRITE,
-                () -> showGallery(root, "MONSTERS", MONSTER_ASSETS, MONSTER_LABELS, 4, 168, 168));
+        StackPane mikeCharacter = makeHoverSprite(MIKE_SPRITE, () -> {
+            playLobbyCharacterScream();
+            showGallery(root, "MONSTERS", MONSTER_ASSETS, MONSTER_LABELS, 4, 168, 168);
+        });
         mikeCharacter.setLayoutX(W / 2.0 - MIKE_SPRITE.displayW / 2.0 - 8);
         mikeCharacter.setLayoutY(540);
 
@@ -311,6 +314,7 @@ public class LandingPage extends Application {
         pane.setOnTouchPressed(e -> startAnimation.run());
         pane.setOnMouseClicked(e -> {
             startAnimation.run();
+            playButtonSound();
             onClick.run();
         });
         pane.setOnMouseExited(e -> {
@@ -500,7 +504,10 @@ public class LandingPage extends Application {
         choice.setStyle("-fx-background-color: rgba(18, 30, 54, 0.92);"
                 + "-fx-border-color: " + toRgb(accent) + "; -fx-border-width: 2;");
         addHoverScale(choice, 1.04);
-        choice.setOnMouseClicked(e -> onClick.run());
+        choice.setOnMouseClicked(e -> {
+            playButtonSound();
+            onClick.run();
+        });
         return choice;
     }
 
@@ -570,7 +577,10 @@ public class LandingPage extends Application {
         button.setStyle("-fx-background-color: rgba(30, 38, 68, 0.92);"
                 + "-fx-border-color: " + toRgb(color) + "; -fx-border-width: 1.5;");
         addHoverScale(button, 1.04);
-        button.setOnMouseClicked(e -> onClick.run());
+        button.setOnMouseClicked(e -> {
+            playButtonSound();
+            onClick.run();
+        });
         return button;
     }
 
@@ -649,19 +659,23 @@ public class LandingPage extends Application {
     }
 
     private void showInstructionsOrOnboarding(Pane root) {
+        if (skipIntroFlow) {
+            startLandingMusic();
+            return;
+        }
         if (!InstructionPages.shouldPlay()) {
             showOnboardingOrStartMusic(root);
             return;
         }
 
         startLandingMusic();
-        instructionPages = new InstructionPages(getClass().getClassLoader(), W, H);
+        instructionPages = new InstructionPages(getClass().getClassLoader(), W, H, this::playButtonSound);
         Pane overlay = instructionPages.getView();
         overlay.setId("instructions-overlay");
         instructionPages.setOnFinished(() -> {
             root.getChildren().remove(overlay);
             disposeInstructions();
-            disposeLandingMusic();
+            stopLandingMusic();
             showOnboardingOrStartMusic(root);
         });
         root.getChildren().add(overlay);
@@ -694,30 +708,39 @@ public class LandingPage extends Application {
     }
 
     private void startLandingMusic() {
-        URL musicUrl = getClass().getClassLoader().getResource("2d/audio/landing-theme.mp3");
-        if (musicUrl == null) {
-            return;
-        }
-        try {
-            landingMusic = new MediaPlayer(new Media(musicUrl.toExternalForm()));
-            landingMusic.setCycleCount(MediaPlayer.INDEFINITE);
-            landingMusic.setVolume(0.18);
-            landingMusic.play();
-        } catch (Exception ignored) {
-            landingMusic = null;
+        ensureSounds().startTheme();
+    }
+
+    private void stopLandingMusic() {
+        if (sounds != null) {
+            sounds.stopTheme();
         }
     }
 
+    private void playButtonSound() {
+        ensureSounds().playSfx(SoundManager2D.BUTTON, BUTTON_SOUND_RATE);
+    }
+
+    private void playLobbyCharacterScream() {
+        ensureSounds().playSfxPausingTheme(SoundManager2D.LOBBY_CHARACTER_SCREAM);
+    }
+
+    private SoundManager2D ensureSounds() {
+        if (sounds == null) {
+            sounds = new SoundManager2D(getClass().getClassLoader(), 0.18);
+        }
+        return sounds;
+    }
+
     private void disposeLandingMusic() {
-        if (landingMusic == null) {
+        if (sounds == null) {
             return;
         }
         try {
-            landingMusic.stop();
-            landingMusic.dispose();
+            sounds.dispose();
         } catch (Exception ignored) {
         } finally {
-            landingMusic = null;
+            sounds = null;
         }
     }
 

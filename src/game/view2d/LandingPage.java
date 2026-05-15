@@ -42,6 +42,7 @@ public class LandingPage extends Application {
     private static volatile String selectedMode = null;
     private MediaPlayer landingMusic;
     private OnboardingCutscene onboardingCutscene;
+    private InstructionPages instructionPages;
     private String pendingRole = null;
 
     private static final int W = 1600;
@@ -206,7 +207,7 @@ public class LandingPage extends Application {
         roleBox.setLayoutY(H - 125);
 
         root.getChildren().addAll(headerMonitor, monstersMenuButton, cardsMenuButton, mikeCharacter, roleBox);
-        showOnboardingOrStartMusic(root);
+        showInstructionsOrOnboarding(root);
 
         Scene scene = new Scene(viewport, W, H);
         scene.setOnKeyPressed(e -> {
@@ -229,6 +230,7 @@ public class LandingPage extends Application {
         stage.setMinWidth(960);
         stage.setMinHeight(540);
         stage.setOnCloseRequest(e -> {
+            disposeInstructions();
             disposeOnboarding();
             disposeLandingMusic();
             selectedRole = null;
@@ -247,6 +249,7 @@ public class LandingPage extends Application {
 
     @Override
     public void stop() {
+        disposeInstructions();
         disposeOnboarding();
         disposeLandingMusic();
     }
@@ -645,6 +648,30 @@ public class LandingPage extends Application {
         return null;
     }
 
+    private void showInstructionsOrOnboarding(Pane root) {
+        if (!InstructionPages.shouldPlay()) {
+            showOnboardingOrStartMusic(root);
+            return;
+        }
+
+        startLandingMusic();
+        instructionPages = new InstructionPages(getClass().getClassLoader(), W, H);
+        Pane overlay = instructionPages.getView();
+        overlay.setId("instructions-overlay");
+        instructionPages.setOnFinished(() -> {
+            root.getChildren().remove(overlay);
+            disposeInstructions();
+            disposeLandingMusic();
+            showOnboardingOrStartMusic(root);
+        });
+        root.getChildren().add(overlay);
+        Platform.runLater(() -> {
+            if (instructionPages != null) {
+                instructionPages.requestFocus();
+            }
+        });
+    }
+
     private void showOnboardingOrStartMusic(Pane root) {
         onboardingCutscene = new OnboardingCutscene(getClass().getClassLoader(), W, H);
         Pane overlay = onboardingCutscene.getView();
@@ -660,6 +687,10 @@ public class LandingPage extends Application {
                 onboardingCutscene.play();
             }
         });
+    }
+
+    private void disposeInstructions() {
+        instructionPages = null;
     }
 
     private void startLandingMusic() {

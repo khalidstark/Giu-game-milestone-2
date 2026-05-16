@@ -187,10 +187,9 @@ public class LandingPage extends Application {
         cardsMenuButton.setLayoutX(W - CARDS_BUTTON.displayW - 42);
         cardsMenuButton.setLayoutY(360);
 
-        StackPane mikeCharacter = makeHoverSprite(MIKE_SPRITE, () -> {
-            playLobbyCharacterScream();
-            showGallery(root, "MONSTERS", MONSTER_ASSETS, MONSTER_LABELS, 4, 168, 168);
-        });
+        StackPane mikeCharacter = makeHoverSprite(MIKE_SPRITE,
+                () -> showGallery(root, "MONSTERS", MONSTER_ASSETS, MONSTER_LABELS, 4, 168, 168),
+                this::playLobbyCharacterScream);
         mikeCharacter.setLayoutX(W / 2.0 - MIKE_SPRITE.displayW / 2.0 - 8);
         mikeCharacter.setLayoutY(540);
 
@@ -363,6 +362,10 @@ public class LandingPage extends Application {
     }
 
     private StackPane makeHoverSprite(SpriteButtonSpec spec, Runnable onClick) {
+        return makeHoverSprite(spec, onClick, () -> {});
+    }
+
+    private StackPane makeHoverSprite(SpriteButtonSpec spec, Runnable onClick, Runnable onHover) {
         Image sheet = loadImage(spec.imagePath);
         Canvas sprite = new Canvas(spec.displayW, spec.displayH);
         GraphicsContext spriteGc = sprite.getGraphicsContext2D();
@@ -398,7 +401,11 @@ public class LandingPage extends Application {
             last[0] = 0;
             draw.run();
         };
-        pane.setOnMouseEntered(e -> start.run());
+        Runnable hoverAction = onHover == null ? () -> {} : onHover;
+        pane.setOnMouseEntered(e -> {
+            start.run();
+            hoverAction.run();
+        });
         pane.setOnMouseExited(e -> stop.run());
         pane.setOnMousePressed(e -> start.run());
         pane.setOnTouchPressed(e -> start.run());
